@@ -1,11 +1,7 @@
 import torch
 import torchvision.models as models
 import torch.onnx
-import onnx
-from onnx import helper
-import tensorflow as tf
 from torch.autograd import Variable
-from onnx_tf.backend import prepare
 
 # Download the pre-trained ResNet50 model
 pytorch_model = models.resnet50(weights='ResNet50_Weights.DEFAULT')
@@ -19,4 +15,3 @@ onnx_path = "resnet50_model.onnx"
 torch.onnx.export(pytorch_model, dummy_input, onnx_path, verbose=True)
 
 print("Conversion completed successfully.")
-
