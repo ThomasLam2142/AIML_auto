@@ -25,6 +25,8 @@ input_batch = input_tensor.unsqueeze(0)  # create a mini-batch as expected by th
 print("GPU Availability: ", torch.cuda.is_available())
 if torch.cuda.is_available():
     input_batch = input_batch.to('cuda')
+else:
+    print("GPU unavailable. Defaulting to CPU")
 
 # Set Execution Provider for ONNX Runtime
 session_fp32 = onnxruntime.InferenceSession("inceptionv3_model.onnx", providers=['MIGraphXExecutionProvider'])
@@ -36,11 +38,14 @@ ort_outputs = session_fp32.run([], {'x.1': input_batch.numpy()})[0]
 
 # Run inference with ONNX Runtime
 latency = []
+torch.cuda.synchronize()
 start = time.time()
 if torch.cuda.is_available():
     input_batch = input_batch.cpu()
 ort_outputs = session_fp32.run([], {'x.1': input_batch.numpy()})[0]
-latency.append(time.time() - start)
+torch.cuda.synchronize()
+end = time.time()
+latency.append(end - start)
 
 # Process ONNX Runtime outputs
 output = ort_outputs.flatten()

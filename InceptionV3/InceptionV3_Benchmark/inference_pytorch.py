@@ -27,17 +27,22 @@ input_batch = input_tensor.unsqueeze(0) # create a mini-batch as expected by the
 if torch.cuda.is_available():
     input_batch = input_batch.to('cuda')
     model.to('cuda')
+else:
+   print("GPU unavailalbe. Defaulting to CPU.")
 
 # warm-up run to load model and data onto gpu first
 with torch.no_grad():
   output = model(input_batch)
 
+# performing inference and recording time
 latency = []
-
+torch.cuda.synchronize()
 start = time.time()
 with torch.no_grad():
   output = model(input_batch)
-latency.append(time.time() - start)
+torch.cuda.synchronize()
+end = time.time()
+latency.append(end - start)
 
 # The output has unnormalized scores. To get probabilities, you can run a softmax on it.
 probabilities = torch.nn.functional.softmax(output[0], dim=0)
