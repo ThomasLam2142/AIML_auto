@@ -30,7 +30,7 @@ tf.config.experimental.set_synchronous_execution(True)
 start = time.time()
 output = model.predict(x)
 end = time.time()
-tf.config.experimental.set_synchronous_execution(True)
+tf.config.experimental.set_synchronous_execution(False)
 latency.append(end - start)
 
 # Show top categories per image
