@@ -19,9 +19,6 @@ input_dict = {'input.1': test_data.numpy()}
 # Load the model
 model = onnx.load("resnet50_model.onnx")
 
-# Create session options with ROCMExecutionProvider
-session = ort.InferenceSession(model, providers=['ROCMExecutionProvider'])
-
 # Convert the model
 model_mixed = auto_mixed_precision.auto_convert_mixed_precision(model, input_dict, rtol=0.03, atol=0.003, keep_io_types=True)
 onnx.save(model_mixed, "resnet50_model_mixed.onnx")
