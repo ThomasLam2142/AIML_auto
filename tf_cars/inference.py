@@ -20,7 +20,7 @@ def prepareImage(img_path):
     img_result = img_result / 255.
     return img_result
 
-test_image = './test/teslamy.jpg'
+test_image = './test/acura.jpg'
 
 input_img = prepareImage(test_image)
 result_arr = model.predict(input_img, verbose = 1)

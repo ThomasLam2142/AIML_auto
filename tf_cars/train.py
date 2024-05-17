@@ -8,6 +8,8 @@ import numpy as np
 from glob import glob
 import matplotlib.pyplot as plt
 import scipy
+import time
+import tensorflow as tf
 
 image_size = [224,224]
 
@@ -46,7 +48,7 @@ model.compile(
             )
 
 # image augmentation
-from keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 train_data = ImageDataGenerator(rescale = 1. / 255,
                                 shear_range = 0.2,
@@ -62,13 +64,28 @@ training_set = train_data.flow_from_directory(train_folder, target_size = (224, 
 print('Validation Data Found:')
 test_set = test_data.flow_from_directory(val_folder, target_size = (224, 224), batch_size = 32, class_mode = 'categorical')
 
+# Synchronize before starting the timer
+tf.function(lambda: None)()
+start_time = time.time()
+
 # fit the model
 result = model.fit(training_set,
                    validation_data = test_set,
-                   epochs = 100,
+                   epochs = 50,
                    steps_per_epoch=len(training_set),
                    validation_steps=len(test_set)
                    )
+
+# Synchronize after training completes
+tf.function(lambda: None)()
+end_time = time.time()
+
+# Calculate the elapsed time
+elapsed_time = end_time - start_time
+print(f"Training time: {elapsed_time} seconds")
+
+# save the model
+model.save('./resnet50_car.h5')
 
 # plot the accuracy result
 # plt.plot(result.history['accuracy'], label='train_acc')
@@ -81,6 +98,3 @@ result = model.fit(training_set,
 # plt.plot(result.history['val_loss'], label='val_loss')
 # plt.legend()
 # plt.show()
-
-# save the model
-model.save('./resnet50_car.h5')
