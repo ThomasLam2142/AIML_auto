@@ -39,7 +39,7 @@ else:
     input_array = input_batch.numpy().astype(np.float16)
 
 # Set Execution Provider for ONNX Runtime
-session_fp16 = onnxruntime.InferenceSession("resnet50_model_fp16.onnx", providers=['MIGraphXExecutionProvider'])
+session_fp16 = onnxruntime.InferenceSession("resnet50_model_fp16.onnx", providers=['ROCMExecutionProvider'])
 
 # warm up run to load model and data onto GPU first
 if torch.cuda.is_available():
