@@ -29,7 +29,7 @@ else:
     print("GPU unavailable. Defaulting to CPU.")
 
 # Set Execution Provider for ONNX Runtime
-session_fp32 = onnxruntime.InferenceSession("resnet50_model_mixed.onnx", providers=['MIGraphXExecutionProvider'])
+session_fp32 = onnxruntime.InferenceSession("resnet50_model_mixed.onnx", providers=['ROCMExecutionProvider'])
 
 # warm up run to load model and data onto GPU first
 if torch.cuda.is_available():
