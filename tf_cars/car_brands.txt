@@ -1,8 +1,0 @@
-Acura
-Audi
-BMW
-Ferrari
-Lexus
-Mercedes
-Porsche
-Tesla
