@@ -11,13 +11,13 @@ model.eval()
 
 tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 
-# Create a dummy output
-dummy_input = tokenizer.encode("This is a dummy input", return_tensors="pt")
+# Create a dummy input
+input = tokenizer.encode("This is a dummy input", return_tensors="pt")
 
 # Export the model to ONNX format
 torch.onnx.export(
     model,                                          # model being run
-    dummy_input,                                    # model input
+    input,                                    # model input
     "bert_tc_model_onnx.onnx",                      # where to save the model
     export_params=True,                             # store the trained parameter weights inside the model file
     opset_version=11,                               # ONNX version to export model to
