@@ -59,7 +59,7 @@ def main():
     best_model_wts = None
 
     # Start Training
-    num_epochs = 50
+    num_epochs = 200
 
     for epoch in range(num_epochs):
         # training one epoch at a time
@@ -78,7 +78,7 @@ def main():
             best_model_wts = model.state_dict().copy()
     
     # Save the best model weights
-    output_model_dir = os.join('models', 'model.pth')
+    output_model_dir = os.path.join('models', 'model.pth')
     os.makedirs('models', exist_ok=True)
     torch.save(best_model_wts, output_model_dir)
 
