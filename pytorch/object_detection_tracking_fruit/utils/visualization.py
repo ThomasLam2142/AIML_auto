@@ -7,7 +7,7 @@ from torchvision import transforms as torchtrans
 def plot_img_bbox(img, target):
     fig, a = plt.subplots(1,1)
     fig.set_size_inches(5,5)
-    a.imshop(img)
+    a.imshow(img)
 
     # Bounding boxes are defined as xmin, ymin, width, height
     for box in (target['boxes'].cpu()):
@@ -15,7 +15,7 @@ def plot_img_bbox(img, target):
         rect = patches.Rectangle((x, y),
                                  width, height,
                                  linewidth = 2,
-                                 dgecolor = 'r',
+                                 edgecolor = 'r',
                                  facecolor = 'none')
         
         # Draw the bounding box on top of the image
