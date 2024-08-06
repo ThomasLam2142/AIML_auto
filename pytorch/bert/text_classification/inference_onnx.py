@@ -1,18 +1,18 @@
 import onnxruntime as ort
-from transformers import AutoTokenizer
 import numpy as np
+from transformers import AutoTokenizer, AutoConfig
 
 text = "This was a masterpiece. Not completely faithful to the books, but enthralling from beginning to end. Might be my favorite of the three."
 
 # Load the tokenizer
 tokenizer = AutoTokenizer.from_pretrained("bert_tc_model/checkpoint-3126")
 
-# Tokenize the text and return tensors
+# Tokenize the input text and return tensors
 inputs = tokenizer(text, return_tensors="np", max_length=7, padding='max_length', truncation=True)
 
 # Load the ONNX model
-onnx_model_path = "bert_tc_model_onnx.onnx"
-session = ort.InferenceSession(onnx_model_path, providers=["MIGraphXExecutionProvider"])
+onnx_model_path = "bert_tc_model_mixed.onnx"
+session = ort.InferenceSession(onnx_model_path, providers=["ROCMExecutionProvider"])
 
 # Run inference
 inputs_onnx = {
@@ -27,7 +27,6 @@ logits = outputs[0]
 num_classes = logits.shape[-1]
 
 # Load model configuration to get labels
-from transformers import AutoConfig
 config = AutoConfig.from_pretrained("bert_tc_model/checkpoint-3126")
 id2label = config.id2label
 
