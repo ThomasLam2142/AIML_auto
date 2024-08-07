@@ -19,7 +19,7 @@ inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors=
 ort_inputs = {k: v.unsqueeze(0).numpy() for k, v in inputs.items()}
 
 # Load the ONNX model
-ort_session = ort.InferenceSession("bert_mc_model.onnx")
+ort_session = ort.InferenceSession("bert_mc_model_fp16.onnx", providers=["ROCMExecutionProvider"])
 
 # Run inference
 ort_outs = ort_session.run(None, ort_inputs)
