@@ -5,6 +5,8 @@ import pickle
 import torch
 import cv2
 
+# code adapted from https://pyimagesearch.com/2021/08/02/pytorch-object-detection-with-pre-trained-networks/
+
 # construct the argument parser
 ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--image", type=str, required=True,

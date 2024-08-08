@@ -9,12 +9,14 @@ import torch
 import time
 import cv2
 
+# code adapted from https://pyimagesearch.com/2021/08/02/pytorch-object-detection-with-pre-trained-networks/
+
 # construct the argument parser
 ap = argparse.ArgumentParser()
 ap.add_argument("-m", "--model", type=str, default="frcnn-resnet", choices=["frcnn-resnet", "frcnn-mobilenet", "retinanet"],
                 help="name of the object detection model")
 ap.add_argument("-l", "--labels", type=str, default="coco_classes.pickle",
-                help="path to file contaning list of categories in COCO dataset")
+                help="path to file containing list of categories in COCO dataset")
 ap.add_argument("-c", "--confidence", type=float, default=0.5,
                 help="minimum probability to filter weak detections")
 args = vars(ap.parse_args())
@@ -26,7 +28,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else print("GPU not de
 CLASSES = pickle.loads(open(args["labels"], "rb").read())
 
 # set a bounding box color for each class
-COLORS = np.random.uniform(0,255, size=(len(CLASSES), 3))
+COLORS = np.random.uniform(0, 255, size=(len(CLASSES), 3))
 
 # initialize a dictionary for each fasterrcnn model
 MODELS = {
@@ -36,13 +38,13 @@ MODELS = {
 }
 
 # load the model and set to eval mode
-model = MODELS[args["model"]](weights=True, progress=True, num_classes=len(CLASSES), weights_backbone=True).to(DEVICE)
+model = MODELS[args["model"]](weights="DEFAULT").to(DEVICE)
 model.eval()
 
 # initialize the video stream and fps counter
 print("Starting video stream...")
 vs = VideoStream(src=0).start()
-time.sleep(2.0) # time for camera to warmup
+time.sleep(2.0) # time for camera to warm up
 fps = FPS().start()
 
 # loop over frames from the video stream
@@ -51,12 +53,12 @@ while True:
 
     # resize the video stream to have a max width of 400px
     frame = vs.read()
-    frame = imutils.resize(frame, width=400)
+    frame = imutils.resize(frame, width=800)
     orig = frame.copy()
 
     # convert the image from BGR to RGB channel and change the image from channels last to channels first ordering
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    frame = frame.transpose((2,0,1))
+    frame = frame.transpose((2, 0, 1))
 
     # add the batch dimension, scale the raw pixel intensities to the range [0, 1], and convert the image to a floating point tensor
     frame = np.expand_dims(frame, axis=0)
@@ -87,22 +89,22 @@ while True:
             y = startY - 15 if startY - 15 > 15 else startY + 15
             cv2.putText(orig, label, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)
 
-        # show the output frame
-        cv2.imshow("Frame", orig)
-        key = cv2.waitKey(1) & 0xFF
+    # show the output frame
+    cv2.imshow("Frame", orig)
+    key = cv2.waitKey(1) & 0xFF
 
-        # if 'q' is pressed, break from the loop
-        if key == ord("q"):
-            break
+    # if 'q' is pressed, break from the loop
+    if key == ord("q"):
+        break
 
-        # update FPS counter
-        fps.update()
+    # update FPS counter
+    fps.update()
 
-    # stop the timer and display the FPS information
-    fps.stop()
-    print("[INFO] elapsed time: {:.2f}".format(fps.elapsed()))
-    print("[INFO] approx FPS: {:.2f}".format(fps.fps()))
+# stop the timer and display the FPS information
+fps.stop()
+print("[INFO] elapsed time: {:.2f}".format(fps.elapsed()))
+print("[INFO] approx FPS: {:.2f}".format(fps.fps()))
 
-    # cleanup
-    cv2.destroyAllWindows
-    vs.stop()
+# cleanup
+cv2.destroyAllWindows()
+vs.stop()
