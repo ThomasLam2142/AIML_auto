@@ -63,6 +63,9 @@ def get_model(args, num_classes):
         model.load_state_dict(torch.load(args.pretrained_path))
 
     if torch.cuda.is_available():
+        if torch.cuda.device_count() > 1:
+            print(f"[INFO] Multiple GPUs detected. Using {torch.cuda.device_count()} GPUs to train...")
+            model = torch.nn.DataParallel(model)
         device = torch.device("cuda")
         model = model.to(device)
         print("[INFO] Model moved to GPU...")
