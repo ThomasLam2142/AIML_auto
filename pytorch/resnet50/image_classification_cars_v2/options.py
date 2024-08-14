@@ -17,7 +17,7 @@ def get_args():
     # training parameters
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--batch_size', type=int, default=256)
-    parser.add_argument('--log_interval', type=int, default=20)
+    parser.add_argument('--log_interval', type=int, default=5)
     parser.add_argument('--amp', action='store_true', default=False)
 
     # optimizer and learning rate schedule
