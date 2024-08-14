@@ -75,7 +75,10 @@ def get_model(args, num_classes):
     return model
 
 def make_optimizer(args, model):
-    trainable_params = model.fc.parameters()
+    if isinstance(model, torch.nn.DataParallel):
+        trainable_params = model.module.fc.parameters()
+    else:
+        trainable_params = model.fc.parameters()
 
     if args.optimizer == 'SGD':
         optimizer_function = optim.SGD

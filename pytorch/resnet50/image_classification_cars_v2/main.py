@@ -39,7 +39,11 @@ def main():
 
     # 6. Loss Scalar (Specific to AMP)
 
-    scaler = torch.GradScaler("cuda")
+    # Nvidia GPUs:
+    #scaler = torch.GradScaler("cuda")
+
+    # AMD GPUs:
+    scaler = torch.cuda.amp.GradScaler()
 
     # 7. Train, Evaluate, and Report Results
 
@@ -87,7 +91,14 @@ def main():
         if result_dict['val_acc'][-1] > best_val_acc:
             print("{} epoch, best epoch was updated! {}%".format(epoch, result_dict['val_acc'][-1]))
             best_val_acc = result_dict['val_acc'][-1]
-            torch.save(model.state_dict(), os.path.join(args.checkpoint_dir, args.checkpoint_name, 'best_model.pth'))  # Save best model
+
+            # Remove DataParallel module prefix if necessary
+            if isinstance(model, nn.DataParallel):
+                model_state_dict = model.module.state_dict()
+            else:
+                model_state_dict = model.state_dict()
+
+            torch.save(model_state_dict, os.path.join(args.checkpoint_dir, args.checkpoint_name, 'best_model.pth'))
 
         evaluator.save(result_dict)
         plot_learning_curves(result_dict, epoch, args)
