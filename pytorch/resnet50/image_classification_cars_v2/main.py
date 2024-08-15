@@ -103,7 +103,16 @@ def main():
         evaluator.save(result_dict)
         plot_learning_curves(result_dict, epoch, args)
 
-    print(result_dict)
+    # Calculate total time in mins
+
+    training_time = sum(train_time_list) / 60
+    valid_time = sum(valid_time_list) / 60
+    total_time = training_time + valid_time
+
+    print('----Training Completed----')
+    print('Total Time (mins): {:.2f} (Training Time (mins): {:.2f} | Validation Time (mins): {:.2f})'.format(total_time, training_time, valid_time))
+
+    #print(result_dict)
     np.savetxt(os.path.join(args.checkpoint_dir, args.checkpoint_name, 'train_time_amp.csv'), train_time_list, delimiter=',', fmt='%s')
     np.savetxt(os.path.join(args.checkpoint_dir, args.checkpoint_name, 'valid_time_amp.csv'), valid_time_list, delimiter=',', fmt='%s')
 
