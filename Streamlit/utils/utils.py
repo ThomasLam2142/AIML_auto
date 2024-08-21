@@ -8,11 +8,15 @@ import torch.optim.lr_scheduler as lrs
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch.utils.data import DataLoader
 
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 import torchvision
 import torchvision.models as models
 from torchvision import transforms as T, datasets
 
-#from utils.lr_scheduler import GradualWarmupScheduler
+from utils.lr_scheduler import GradualWarmupScheduler
 
 def make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, seed):
     
@@ -20,7 +24,7 @@ def make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, see
 
     transforms = T.Compose([
         T.Resize((256, 256)),
-        T.RandomHorizontalFlip,
+        T.RandomHorizontalFlip(),
         T.ToTensor(),
     ])
 
@@ -97,6 +101,125 @@ def make_model(model_name, num_classes, pretrained_path, num_gpus):
     else:
         messages.append("GPU not detected. Please check that PyTorch recognizes the GPUs...")
 
-    messages.append("[INFO] Model successfully created")
+    messages.append("[INFO] Model created")
 
     return model, messages
+
+def make_optimizer(model, optimizer, learning_rate, weight_decay):
+
+    messages = []
+
+    if isinstance(model, torch.nn.DataParallel):
+        trainable_params = model.module.fc.parameters()
+    else:
+        trainable_params = model.fc.parameters()
+
+    if optimizer == 'SGD':
+        optimizer_function = optim.SGD
+        kwargs = {'momentum': 0.9}
+        messages.append("[INFO] SGD optimizer loaded")
+    elif optimizer == 'ADAM':
+        optimizer_function = optim.Adam
+        kwargs = {
+            'betas': (0.9, 0.999),
+            'eps': 1e-08
+        }
+        messages.append("[INFO] ADAM optimizer loaded")
+    
+    kwargs['lr'] = learning_rate
+    kwargs['weight_decay'] = weight_decay
+
+    return optimizer_function(trainable_params, **kwargs), messages
+
+def make_scheduler(optimizer, decay_type, epochs):
+
+    messages = []
+
+    if decay_type == 'step':
+        scheduler = lrs.MultiStepLR(
+            optimizer,
+            milestones=[30, 60, 90],
+            gamma=0.1
+        )
+        messages.append("[INFO] Step learning scheduler created")
+    elif decay_type == 'step_warmup':
+        scheduler = lrs.MultiStepLR(
+            optimizer,
+            milestones=[30, 60, 90],
+            gamma=0.1
+        )
+        scheduler = GradualWarmupScheduler(
+            optimizer,
+            multiplier=1,
+            total_epoch=5,
+            after_scheduler=scheduler
+        )
+        messages.append("[INFO] Step warmup learning scheduler created")
+    elif decay_type == 'cosine_warmup':
+        cosine_scheduler = lrs.CosineAnnealingLR(
+            optimizer,
+            T_max=epochs
+        )
+        scheduler = GradualWarmupScheduler(
+            optimizer,
+            multiplier=1,
+            total_epoch=epochs//10,
+            after_scheduler=cosine_scheduler
+        )
+        messages.append("[INFO] Cosine learning scheduler created")
+
+    return scheduler, messages
+
+class AverageMeter(object):
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+        self.max = 0
+        self.min = 1e5
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+        if val > self.max:
+            self.max = val
+        if val < self.min:
+            self.min = val
+
+def accuracy(output, target, topk=(1,)):
+    maxk = max(topk)
+    batch_size = target.size(0)
+
+    _, pred = output.topk(maxk, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].reshape(-1).float().sum(0)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
+
+def plot_learning_curves(metrics, cur_epoch, checkpoint_dir, checkpoint_name):
+    x = np.arange(cur_epoch+1)
+    fig, ax1 = plt.subplots()
+    ax1.set_xlabel('epochs')
+    ax1.set_ylabel('loss')
+    ln1 = ax1.plot(x, metrics['train_loss'], color='tab:red')
+    ln2 = ax1.plot(x, metrics['val_loss'], color='tab:red', linestyle='dashed')
+    ax1.grid()
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('accuracy')
+    ln3 = ax2.plot(x, metrics['train_acc'], color='tab:blue')
+    ln4 = ax2.plot(x, metrics['val_acc'], color='tab:blue', linestyle='dashed')
+    lns = ln1+ln2+ln3+ln4
+    plt.legend(lns, ['Train loss', 'Validation loss', 'Train accuracy','Validation accuracy'])
+    plt.tight_layout()
+    plt.savefig('{}/{}/learning_curve.png'.format(checkpoint_dir, checkpoint_name), bbox_inches='tight')
+    plt.close('all')
