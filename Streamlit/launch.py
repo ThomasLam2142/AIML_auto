@@ -58,218 +58,241 @@ def plot_live_metrics(result_dict, epochs, placeholder):
 
         # Display the plot in Streamlit
         placeholder.pyplot(fig)
-    
+
+# Function to update the table for best model metrics
+
 def update_table(result_dict, placeholder):
 
     if 'test_acc' in result_dict and isinstance(result_dict['test_acc'], list) and result_dict['test_acc']:
         test_acc = round(result_dict['test_acc'][-1], 2)
     else:
-        test_acc = 0.00
+        test_acc = ''
         
     data = {
-        'Best Model Epoch': [0],
-        'Train Loss': [0],
-        'Train Accuracy': [0],
-        'Top 1 Accuracy': [0],
-        'Test Accuracy': [test_acc],
+        'Best Model Epoch': [result_dict.get('best_epoch', 0)],
+        'Train Loss (%)': [result_dict.get('best_train_loss', 0.00)],
+        'Train Accuracy (%)': [result_dict.get('best_train_acc', 0.00)],
+        'Top 1 Accuracy (%)': [result_dict.get('top1_acc', 0.00)],
+        'Test Accuracy (%)': [test_acc],
     }
     df = pd.DataFrame(data)
-    placeholder.dataframe(df)
+    placeholder.dataframe(df, hide_index=True)
 
 # Streamlit UI setup
-st.title('Vision Model Fine-Tuner')
 
-with st.form(key='my_form'):
-    st.write('Training Parameters')
+# Initialize session state to keep track of the current page
+if "page" not in st.session_state:
+    st.session_state.page = "Training"
 
-    col1, col2 = st.columns(2)
+# Sidebar navigation
+st.sidebar.title("Navigation")
+if st.sidebar.button("Training", use_container_width=True):
+    st.session_state.page = "Training"
+if st.sidebar.button("Inference", use_container_width=True):
+    st.session_state.page = "Inference"
 
-    with col1:
-        model = st.selectbox(
-            label='Model',
-            options=['ResNet50', 'ResNet18', 'InceptionV3'],
-        )
+# Training Page
+if st.session_state.page == "Training":
+    st.title("Training")
+    st.write("This is the training page. You can start training your model here.")
 
-        epochs = st.number_input(
-            label='Number of Epochs',
-            step=10,
-            value=100,
-        )
+    with st.form(key='my_form'):
+        st.write('Training Parameters')
 
-        batch_size = st.number_input(
-            label='Batch Size',
-            step=32,
-            value=256,
-        )
+        col1, col2 = st.columns(2)
 
-        learning_rate = st.number_input(
-            label='Learning Rate',
-            value=0.0001,
-            step=0.0001,
-            format='%.4f',
-        )
+        with col1:
+            model = st.selectbox(
+                label='Model',
+                options=['ResNet50', 'ResNet18', 'InceptionV3'],
+            )
 
-        weight_decay = st.number_input(
-            label='Weight Decay',
-            value=0.0001,
-            step=0.0001,
-            format='%.4f',
-        )
+            epochs = st.number_input(
+                label='Number of Epochs',
+                step=10,
+                value=100,
+            )
 
-        log_interval = st.number_input(
-            label='Log Interval',
-            step=5,
-            value=5,
-        )
+            batch_size = st.number_input(
+                label='Batch Size',
+                step=32,
+                value=256,
+            )
 
-        num_gpus = st.number_input(
-            label='Number of GPUs',
-            value=1,
-        )
+            learning_rate = st.number_input(
+                label='Learning Rate',
+                value=0.0001,
+                step=0.0001,
+                format='%.4f',
+            )
 
-    with col2:
-        optimizer = st.radio(
-            label='Optimizer',
-            options=['ADAM', 'SGD'],
-        )
+            weight_decay = st.number_input(
+                label='Weight Decay',
+                value=0.0001,
+                step=0.0001,
+                format='%.4f',
+            )
 
-        decay_type = st.radio(
-            label='Learning Rate Decay',
-            options=['cosine_warmup', 'step_warmup', 'step'],
-        )
+            log_interval = st.number_input(
+                label='Log Interval',
+                step=5,
+                value=5,
+            )
 
-        amp = st.radio(
-            label='Mixed Precision',
-            options=['No', 'Yes'],
-        )
+            num_gpus = st.number_input(
+                label='Number of GPUs',
+                value=1,
+            )
 
-    st.write('Data Loading')
+        with col2:
+            optimizer = st.radio(
+                label='Optimizer',
+                options=['ADAM', 'SGD'],
+            )
 
-    col3, col4 = st.columns(2)
+            decay_type = st.radio(
+                label='Learning Rate Decay',
+                options=['cosine_warmup', 'step_warmup', 'step'],
+            )
 
-    with col3:
-        num_workers = st.number_input(
-            label='Number of Workers',
-            value=16,
-        )
+            amp = st.radio(
+                label='Mixed Precision',
+                options=['No', 'Yes'],
+            )
 
-    with col4:
-        seed = st.number_input(
-            label='Seed',
-            value=42,
-        )
+        st.write('Data Loading')
 
-    st.write('Directory Paths')
-    st.caption('If the data is not pre-split, only fill out the Training Directory')
-    
-    col5, col6 = st.columns(2)
+        col3, col4 = st.columns(2)
 
-    with col5:
-        train_dir = st.text_input(
-            label='Training Directory',
-        )
+        with col3:
+            num_workers = st.number_input(
+                label='Number of Workers',
+                value=16,
+            )
 
-        valid_dir = st.text_input(
-            label='Validation Directory',
-        )
+        with col4:
+            seed = st.number_input(
+                label='Seed',
+                value=42,
+            )
 
-        test_dir = st.text_input(
-            label='Test Directory',
-        )
-
-    with col6:
-        pretrained_path = st.text_input(
-            label='Pretrained Model Weights Path',
-        )
+        st.write('Directory Paths')
+        st.caption('If the data is not pre-split, only fill out the Training Directory')
         
-        checkpoint_name = st.text_input(
-            label='Checkpoint Name',
-            value='baseline',
-        )
+        col5, col6 = st.columns(2)
+
+        with col5:
+            train_dir = st.text_input(
+                label='Training Directory',
+            )
+
+            valid_dir = st.text_input(
+                label='Validation Directory',
+            )
+
+            test_dir = st.text_input(
+                label='Test Directory',
+            )
+
+        with col6:
+            pretrained_path = st.text_input(
+                label='Pretrained Model Weights Path',
+            )
+            
+            checkpoint_name = st.text_input(
+                label='Checkpoint Name',
+                value='baseline',
+            )
+            
+            checkpoint_dir = st.text_input(
+                label='Save Directory',
+                value='checkpoints',
+            )
+
+        submit_button = st.form_submit_button(label='Submit')
+
+    # Placeholder for progress bar
+    progress_placeholder = st.progress(0, text="Epoch: 0 / 0")
+
+    # Placeholder for plot
+    plot_placeholder = st.empty()
+
+    fig, ax1 = plt.subplots()
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.set_title('Training Progress')
+    ax1.grid()
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Accuracy')
+    plot_placeholder.pyplot(fig)
+
+    # Data table to track best model
+    data = {
+            'Best Model Epoch': [0],
+            'Train Loss (%)': [0],
+            'Train Accuracy (%)': [0],
+            'Top 1 Accuracy (%)': [0],
+            'Test Accuracy (%)': [0],
+    }
+
+    df = pd.DataFrame(data)
+
+    # Display the DataFrame in Streamlit
+    table_placeholder = st.empty()
+    table_placeholder.dataframe(df, hide_index=True)
+
+    # Handle submit
+    if submit_button:
         
-        checkpoint_dir = st.text_input(
-            label='Save Directory',
-            value='checkpoints',
-        )
+        # Path to JSON file
+        file_path = os.path.join(checkpoint_dir, checkpoint_name, 'result_dict.json')
+        image_path = os.path.join(checkpoint_dir, checkpoint_name, 'learning_curve.png')
 
-    submit_button = st.form_submit_button(label='Submit')
+        def run_training():
+            train(
+                model,
+                epochs,
+                batch_size,
+                learning_rate,
+                weight_decay,
+                log_interval,
+                num_gpus,
+                optimizer,
+                decay_type,
+                amp,
+                num_workers,
+                seed,
+                train_dir,
+                valid_dir,
+                test_dir,
+                pretrained_path,
+                checkpoint_name,
+                checkpoint_dir,
+            )
 
-# Placeholder for progress bar
-progress_placeholder = st.progress(0, text="Epoch: 0 / 0")
+        # Start training in a background thread
+        training_thread = threading.Thread(target=run_training)
+        training_thread.start()
 
-# Placeholder for plot
-plot_placeholder = st.empty()
+        # Monitor and update plot
+        while training_thread.is_alive():
+            if os.path.exists(file_path):
+                result_dict = read_json_file(file_path)
+                update_progress_bar(result_dict, epochs, progress_placeholder)
+                plot_live_metrics(result_dict, epochs, plot_placeholder)
+                update_table(result_dict, table_placeholder)
+            time.sleep(5)  # Refresh every 5 seconds
 
-fig, ax1 = plt.subplots()
-ax1.set_xlabel('Epoch')
-ax1.set_ylabel('Loss')
-ax1.set_title('Training Progress')
-ax1.grid()
-ax2 = ax1.twinx()
-ax2.set_ylabel('Accuracy')
-plot_placeholder.pyplot(fig)
-
-# Data table to track best model
-data = {
-        'Best Model Epoch': [0],
-        'Train Loss': [0],
-        'Train Accuracy': [0],
-        'Top 1 Accuracy': [0],
-        'Test Accuracy': [0],
-}
-
-df = pd.DataFrame(data)
-
-# Display the DataFrame in Streamlit
-table_placeholder = st.empty()
-table_placeholder.dataframe(df)
-
-# Handle submit
-if submit_button:
-    
-    # Path to JSON file
-    file_path = os.path.join(checkpoint_dir, checkpoint_name, 'result_dict.json')
-    image_path = os.path.join(checkpoint_dir, checkpoint_name, 'learning_curve.png')
-
-    def run_training():
-        train(
-            model,
-            epochs,
-            batch_size,
-            learning_rate,
-            weight_decay,
-            log_interval,
-            num_gpus,
-            optimizer,
-            decay_type,
-            amp,
-            num_workers,
-            seed,
-            train_dir,
-            valid_dir,
-            test_dir,
-            pretrained_path,
-            checkpoint_name,
-            checkpoint_dir,
-        )
-
-    # Start training in a background thread
-    training_thread = threading.Thread(target=run_training)
-    training_thread.start()
-
-    # Monitor and update plot
-    while training_thread.is_alive():
+        # Ensure final plot update
         if os.path.exists(file_path):
             result_dict = read_json_file(file_path)
             update_progress_bar(result_dict, epochs, progress_placeholder)
             plot_live_metrics(result_dict, epochs, plot_placeholder)
             update_table(result_dict, table_placeholder)
-        time.sleep(5)  # Refresh every 5 seconds
+        st.write("Training complete!")
 
-    # Ensure final plot update
-    if os.path.exists(file_path):
-        result_dict = read_json_file(file_path)
-        update_progress_bar(result_dict, epochs, progress_placeholder)
-        plot_live_metrics(result_dict, epochs, plot_placeholder)
-        update_table(result_dict, table_placeholder)
-    st.write("Training complete!")
+# Inference Page
+elif st.session_state.page == "Inference":
+    st.title("Inference Page")
+    st.write("This is the inference page. You can run inference on your model here.")
+    # Add your inference-related code and UI elements here

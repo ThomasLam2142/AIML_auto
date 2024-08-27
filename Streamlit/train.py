@@ -28,14 +28,13 @@ def train(
     pretrained_path,
     checkpoint_name,
     checkpoint_dir,
-    num_classes=50,
 ):
     
     messages = []
 
     # 1. Datalaoder
 
-    train_loader, valid_loader, test_loader, dataloader_messages = make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, seed)
+    train_loader, valid_loader, test_loader, num_classes, dataloader_messages = make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, seed)
     messages.extend(dataloader_messages)
 
     # 2. Load Model
@@ -69,7 +68,11 @@ def train(
         'train_acc': [],
         'val_loss': [],
         'val_acc': [],
-        'test_acc': []
+        'test_acc': [],
+        'best_epoch': [],
+        'best_train_loss': [],
+        'best_train_acc': [],
+        'top1_acc': []
     }
 
     trainer = Trainer(model, criterion, optimizer, scheduler, scaler)
@@ -109,6 +112,12 @@ def train(
             print("{} epoch, best epoch was updated! {}%".format(epoch, result_dict['val_acc'][-1]))
             best_val_acc = result_dict['val_acc'][-1]
 
+            # Update best model metrics
+            result_dict['best_epoch'] = epoch + 1
+            result_dict['best_train_loss'] = result_dict['train_loss'][-1]
+            result_dict['best_train_acc'] = result_dict['train_acc'][-1]
+            result_dict['top1_acc'] = result_dict['val_acc'][-1]
+
             # Remove DataParallel module prefix if necessary
             if isinstance(model, nn.DataParallel):
                 model_state_dict = model.module.state_dict()
@@ -121,7 +130,11 @@ def train(
 
         plot_learning_curves(result_dict, epoch, checkpoint_dir, checkpoint_name)
 
-    # Calculate test accuracy using best model
+    # Unwrap the model from DataParallel since training is complete
+    if isinstance(model, nn.DataParallel):
+        model = model.module
+
+    # Calculate test accuracy using best model    
     model.load_state_dict(torch.load(model_path))
     result_dict = evaluator.test(test_loader, result_dict)
     evaluator.save(result_dict)
@@ -136,8 +149,8 @@ def train(
     print('Total Time (mins): {:.2f} (Training Time (mins): {:.2f} | Validation Time (mins): {:.2f})'.format(total_time, training_time, valid_time))
 
     #print(result_dict)
-    #np.savetxt(os.path.join(checkpoint_dir, checkpoint_name, 'train_time_amp.csv'), train_time_list, delimiter=',', fmt='%s')
-    #np.savetxt(os.path.join(checkpoint_dir, checkpoint_name, 'valid_time_amp.csv'), valid_time_list, delimiter=',', fmt='%s')
+    np.savetxt(os.path.join(checkpoint_dir, checkpoint_name, 'train_time_amp.csv'), train_time_list, delimiter=',', fmt='%s')
+    np.savetxt(os.path.join(checkpoint_dir, checkpoint_name, 'valid_time_amp.csv'), valid_time_list, delimiter=',', fmt='%s')
 
     return {
         "model":              model_name,

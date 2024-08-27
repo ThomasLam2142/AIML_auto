@@ -35,6 +35,9 @@ def make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, see
         # Load dataset
         dataset = datasets.ImageFolder(root=train_dir, transform=transforms)
 
+        # Get number of classes (i.e num folders)
+        num_classes = len(dataset.classes)
+
         # Seed for reproducibility
         np.random.seed(seed)
 
@@ -61,13 +64,27 @@ def make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, see
         train_dataset = datasets.ImageFolder(root=train_dir, transform=transforms)
         valid_dataset = datasets.ImageFolder(root=valid_dir, transform=transforms)
         test_dataset = datasets.ImageFolder(root=test_dir, transform=transforms)
+
+        # Get number of classes (i.e. num folders)
+
+        num_train_classes = len(train_dataset.classes)
+        num_valid_classes = len(valid_dataset.classes)
+        num_test_classes = len(test_dataset.classes)
+
+        if num_train_classes == num_valid_classes == num_test_classes:
+            num_classes = num_train_classes
+        else:
+            raise ValueError(f"The datasets have a different number of classes: "
+                             f"Train: {num_train_classes}, "
+                             f"Valid: {num_valid_classes}, "
+                             f"Teest: {num_test_classes}, ")
        
        # Create data loaders
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
         valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     
-    return train_loader, valid_loader, test_loader, messages
+    return train_loader, valid_loader, test_loader, num_classes, messages
 
 def make_model(model_name, num_classes, pretrained_path, num_gpus):
     
