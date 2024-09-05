@@ -34,7 +34,7 @@ def train(
 
     # 1. Datalaoder
 
-    train_loader, valid_loader, test_loader, num_classes, dataloader_messages = make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, seed)
+    train_loader, valid_loader, test_loader, num_classes, dataloader_messages = make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, seed, checkpoint_dir, checkpoint_name)
     messages.extend(dataloader_messages)
 
     # 2. Load Model

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 
@@ -18,7 +19,19 @@ from torchvision import transforms as T, datasets
 
 from utils.lr_scheduler import GradualWarmupScheduler
 
-def make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, seed):
+def make_class_names(class_names, checkpoint_dir, checkpoint_name):
+
+    checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
+    if not os.path.exists(checkpoint_path):
+        os.makedirs(checkpoint_path)
+
+    class_name_path = os.path.join(checkpoint_path, 'class_names.txt')
+
+    with open(class_name_path, 'w') as f:
+        for class_name in class_names:
+            f.write(f"{class_name}\n")
+
+def make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, seed, checkpoint_dir, checkpoint_name):
     
     messages = []
 
@@ -37,6 +50,10 @@ def make_dataloader(train_dir, valid_dir, test_dir, batch_size, num_workers, see
 
         # Get number of classes (i.e num folders)
         num_classes = len(dataset.classes)
+
+        # Extract class names (for inference)
+        class_names = dataset.classes
+        make_class_names(class_names, checkpoint_dir, checkpoint_name)
 
         # Seed for reproducibility
         np.random.seed(seed)
