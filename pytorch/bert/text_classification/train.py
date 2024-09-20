@@ -1,13 +1,19 @@
-from datasets import load_dataset
-from transformers import AutoTokenizer
-from transformers import DataCollatorWithPadding
-from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
-import evaluate
+import argparse
+import time
 import numpy as np
+import torch
+from datasets import load_dataset
+from transformers import (AutoTokenizer, AutoModelForSequenceClassification, 
+                          DataCollatorWithPadding, TrainingArguments, Trainer)
+import evaluate
 
+# Command-line argument parsing
+parser = argparse.ArgumentParser(description="Train a DistilBERT model with optional mixed precision.")
+parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision (AMP).')
+args = parser.parse_args()
+
+# Load and preprocess dataset
 imdb = load_dataset("imdb")
-
-# Preprocess
 
 # Load DistilBERT tokenizer
 tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
@@ -35,11 +41,11 @@ id2label = {0: "NEGATIVE", 1: "POSITIVE"}
 label2id = {"NEGATIVE": 0, "POSITIVE": 1}
 
 # Train
-
 model = AutoModelForSequenceClassification.from_pretrained(
     "distilbert/distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
 )
 
+# Set fp16 in TrainingArguments based on command-line args
 training_args = TrainingArguments(
     output_dir="bert_tc_model",
     learning_rate=2e-5,
@@ -51,6 +57,7 @@ training_args = TrainingArguments(
     save_strategy="epoch",
     load_best_model_at_end=True,
     push_to_hub=False,
+    fp16=args.amp  # Enable mixed precision if -amp is specified
 )
 
 trainer = Trainer(
@@ -63,4 +70,15 @@ trainer = Trainer(
     compute_metrics=compute_metrics,
 )
 
+# Train the model and record training time
+torch.cuda.synchronize()
+start_time = time.time()
+
 trainer.train()
+
+end_time = time.time()
+torch.cuda.synchronize()
+
+# Calculate elapsed time
+elapsed_time = (end_time - start_time) / 60
+print(f"Train Time: {elapsed_time:.2f} mins")
