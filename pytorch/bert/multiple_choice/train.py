@@ -1,11 +1,18 @@
+import argparse
+import torch
+import time
 from datasets import load_dataset
 from dataclasses import dataclass
 from transformers import AutoTokenizer, AutoModelForMultipleChoice, TrainingArguments, Trainer
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
 from typing import Optional, Union
-import torch
 import evaluate
 import numpy as np
+
+# Command-line argument parsing
+parser = argparse.ArgumentParser(description="Train a BERT model for multiple choice with optional mixed precision.")
+parser.add_argument('--amp', action='store_true', help="Use automatic mixed precision (AMP) for training.")
+args = parser.parse_args()
 
 # Load SWAG dataset
 swag = load_dataset("swag", "regular")
@@ -71,10 +78,10 @@ def compute_metrics(eval_pred):
     predictions = np.argmax(predictions, axis=1)
     return accuracy.compute(predictions=predictions, references=labels)
 
-# Train
-
+# Load model
 model = AutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 
+# Set up TrainingArguments
 training_args = TrainingArguments(
     output_dir="bert_mc_model",
     evaluation_strategy="epoch",
@@ -86,9 +93,23 @@ training_args = TrainingArguments(
     num_train_epochs=3,
     weight_decay=0.01,
     push_to_hub=False,
+    fp16=args.amp,  # Enable mixed precision if --amp is provided
 )
 
-trainer = Trainer(
+# Define Trainer class with mixed precision support
+class CustomTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        if args.amp:
+            with torch.cuda.amp.autocast():
+                outputs = model(**inputs)
+                loss = outputs.loss
+        else:
+            outputs = model(**inputs)
+            loss = outputs.loss
+        return (loss, outputs) if return_outputs else loss
+
+# Initialize Trainer
+trainer = CustomTrainer(
     model=model,
     args=training_args,
     train_dataset=tokenized_swag["train"],
@@ -98,4 +119,21 @@ trainer = Trainer(
     compute_metrics=compute_metrics,
 )
 
+# Synchronize and start the timer
+if torch.cuda.is_available():
+    torch.cuda.synchronize()
+
+start_time = time.time()
+
+# Perform training
 trainer.train()
+
+# Synchronize and end the timer
+if torch.cuda.is_available():
+    torch.cuda.synchronize()
+
+end_time = time.time()
+
+# Calculate and print the training time in minutes
+training_duration = (end_time - start_time) / 60  # Convert seconds to minutes
+print(f"Training Time = {training_duration:.2f} minutes")
