@@ -1,9 +1,15 @@
+import argparse
+import torch
+import time
 from datasets import load_dataset
-from transformers import AutoTokenizer
-from transformers import DefaultDataCollator
-from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
+from transformers import AutoTokenizer, DefaultDataCollator, AutoModelForQuestionAnswering, TrainingArguments, Trainer
 
-# Load a subset of the SQuAD dataset from the Datasets library and split the data into test and train groups 
+# Command-line argument parsing
+parser = argparse.ArgumentParser(description="Train a model with different precisions.")
+parser.add_argument('--amp', action='store_true', help="Use automatic mixed precision (AMP) for training")
+args = parser.parse_args()
+
+# Load a subset of the SQuAD dataset from the Datasets library and split the data into test and train groups
 squad = load_dataset("squad", split="train[:5000]")
 squad = squad.train_test_split(test_size=0.2)
 
@@ -70,6 +76,7 @@ data_collator = DefaultDataCollator()
 # Train model
 model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 
+# TrainingArguments configuration
 training_args = TrainingArguments(
     output_dir="distilbert_qa_model",
     evaluation_strategy="epoch",
@@ -79,6 +86,7 @@ training_args = TrainingArguments(
     num_train_epochs=3,
     weight_decay=0.01,
     push_to_hub=False,
+    fp16=args.amp  # Enable AMP if --amp is provided
 )
 
 trainer = Trainer(
@@ -90,4 +98,20 @@ trainer = Trainer(
     data_collator=data_collator,
 )
 
+# Measure the training time
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if device.type == 'cuda':
+    torch.cuda.synchronize()
+
+start_time = time.time()
+
 trainer.train()
+
+if device.type == 'cuda':
+    torch.cuda.synchronize()
+
+end_time = time.time()
+
+# Calculate and print the total training time in minutes
+training_duration = (end_time - start_time) / 60
+print(f"Training Time = {training_duration:.2f} minutes")
