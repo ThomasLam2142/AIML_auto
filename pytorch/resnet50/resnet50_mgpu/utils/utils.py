@@ -141,6 +141,7 @@ def make_model(model_name, num_classes, pretrained_path, num_gpus):
 def make_optimizer(model, optimizer, learning_rate, weight_decay):
 
     messages = []
+    print("Model using Data Parrallel?")
     print(isinstance(model, torch.nn.DataParallel))
     if isinstance(model, torch.nn.DataParallel):
         trainable_params = model.module.fc.parameters()
@@ -226,7 +227,7 @@ class AverageMeter(object):
             self.min = val
 
 def accuracy(output, target, topk=(1,)):
-    maxk = max(topk)
+    maxk = min(max(topk), output.size(1))
     batch_size = target.size(0)
 
     _, pred = output.topk(maxk, 1, True, True)
@@ -235,8 +236,9 @@ def accuracy(output, target, topk=(1,)):
 
     res = []
     for k in topk:
-        correct_k = correct[:k].reshape(-1).float().sum(0)
-        res.append(correct_k.mul_(100.0 / batch_size))
+        if k <= output.size(1):
+            correct_k = correct[:k].reshape(-1).float().sum(0)
+            res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
 def plot_learning_curves(metrics, cur_epoch, checkpoint_dir, checkpoint_name):
