@@ -28,6 +28,7 @@ def train(
     pretrained_path,
     checkpoint_name,
     checkpoint_dir,
+    use_ort,
 ):
     
     messages = []
@@ -71,7 +72,7 @@ def train(
         'top1_acc': []
     }
 
-    trainer = Trainer(model, criterion, optimizer, scheduler, scaler)
+    trainer = Trainer(model, criterion, optimizer, scheduler, scaler, use_ort=use_ort)
     evaluator = Evaluator(model, criterion, checkpoint_dir, checkpoint_name)
 
     train_time_list = []
@@ -167,5 +168,6 @@ def train(
         "checkpoint_name":    checkpoint_name,
         "checkpoint_dir":     checkpoint_dir,
         "messages":           messages,
-        "result_dict":        result_dict
+        "result_dict":        result_dict,
+        "use_ort":            use_ort
     }
