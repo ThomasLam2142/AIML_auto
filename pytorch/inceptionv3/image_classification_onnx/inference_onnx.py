@@ -4,6 +4,45 @@ from PIL import Image
 import onnxruntime
 import time
 import numpy as np
+import argparse
+
+# Parse command-line arguments for precision
+parser = argparse.ArgumentParser(description="Precision options for ResNet50 inference")
+parser.add_argument(
+    "--precision",
+    type=str,
+    choices=["fp32", "fp16", "mixed"],
+    default="fp32",
+    help="Set the precision level for inference: fp32, fp16, mixed"
+)
+parser.add_argument(
+    "--ep",
+    type=str,
+    choices=["rocm", "migx", "cuda", "openvino"],
+    default="rocm",
+    help="Set the execution provider for inference: rocm, migx, cuda, openvino"
+)
+args = parser.parse_args()
+
+# Set the execution provider
+execution_provider = None
+if args.ep == "rocm":
+    execution_provider = "ROCmExecutionProvider"
+elif args.ep == "migx":
+    execution_provider = "MIGraphXExecutionProvider"
+elif args.ep == "cuda":
+    execution_provider = "CUDAExecutionProvider"
+elif args.ep == "openvino":
+    execution_provider = "OpenVINOExecutionProvider"
+    
+# Set the model
+model_name = None
+if args.precision == "fp32":
+    model_name = "inceptionv3_model.onnx"
+elif args.precision == "fp16":
+    model_name = "inceptionv3_model_fp16.onnx"
+elif args.precision == "mixed":
+    model_name = "inceptionv3_model_mixed.onnx"
 
 # Read the categories
 with open("imagenet_classes.txt", "r") as f:
@@ -19,30 +58,41 @@ preprocess = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 input_tensor = preprocess(input_image)
-input_batch = input_tensor.unsqueeze(0)  # create a mini-batch as expected by the model
 
-# move the input to GPU for speed if available
+# Adjust tensor size for model (all precisions)
+input_batch = input_tensor.unsqueeze(0)
+
+# Move the input and model to the GPU
 print("GPU Availability: ", torch.cuda.is_available())
 if torch.cuda.is_available():
     input_batch = input_batch.to('cuda')
 else:
     print("GPU unavailable. Defaulting to CPU")
 
-# Set Execution Provider for ONNX Runtime
-session_fp32 = onnxruntime.InferenceSession("inceptionv3_model.onnx", providers=['MIGraphXExecutionProvider'])
+# If fp16, convert the input tensor to an fp16 numpy array
+if args.precision == "fp16":
+    if torch.cuda.is_available():
+        input_batch = input_batch.to(torch.float16)
+    else:
+        print("GPU is not available!")
 
-# warm up run to load model and data onto gpu first
+# Set Execution Provider for ONNX Runtime
+session = onnxruntime.InferenceSession(model_name, providers=[execution_provider])
+
+# Warm up run to load model and data onto the GPU
 if torch.cuda.is_available():
     input_batch = input_batch.cpu()
-ort_outputs = session_fp32.run([], {'x.1': input_batch.numpy()})[0]
+ort_outputs = session.run([], {'x.1': input_batch.numpy()})[0]
 
 # Run inference with ONNX Runtime
 latency = []
 torch.cuda.synchronize()
 start = time.time()
+
 if torch.cuda.is_available():
     input_batch = input_batch.cpu()
-ort_outputs = session_fp32.run([], {'x.1': input_batch.numpy()})[0]
+ort_outputs = session.run([], {'x.1': input_batch.numpy()})[0]
+
 torch.cuda.synchronize()
 end = time.time()
 latency.append(end - start)
