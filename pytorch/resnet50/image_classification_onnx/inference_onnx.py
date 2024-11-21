@@ -84,7 +84,7 @@ session = onnxruntime.InferenceSession(model_name, providers=[execution_provider
 # Warm up run to load model and data onto the GPU
 if torch.cuda.is_available():
     input_batch = input_batch.cpu()
-ort_outputs = session_fp32.run([], {'input.1': input_batch.numpy()})[0]
+ort_outputs = session.run([], {'input.1': input_batch.numpy()})[0]
 
 # Run inference with ONNX Runtime
 latency = []
@@ -93,7 +93,7 @@ start = time.time()
 
 if torch.cuda.is_available():
     input_batch = input_batch.cpu()
-ort_outputs = session_fp32.run([], {'input.1': input_batch.numpy()})[0]
+ort_outputs = session.run([], {'input.1': input_batch.numpy()})[0]
 
 torch.cuda.synchronize()
 end = time.time()
