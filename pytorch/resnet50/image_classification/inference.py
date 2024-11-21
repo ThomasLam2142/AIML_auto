@@ -36,7 +36,6 @@ input_tensor = preprocess(input_image)
 
 # If fp16, adjust model and input tensor accordingly
 if args.precision == "fp16":
-    print("Inferencing in FP16 mode...")
     model = model.half()
     input_tensor = input_tensor.half()
 
