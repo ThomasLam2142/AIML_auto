@@ -20,20 +20,22 @@ parser.add_argument(
     type=str,
     choices=["rocm", "migx", "cuda", "openvino"],
     default="rocm",
-    help="Set the execution provider for inference: rocm, migx, cuda, openvino"
+    help="Set the execution provider for inference: rocm, migx, cuda, openvino, cpu"
 )
 args = parser.parse_args()
 
 # Set the execution provider
 execution_provider = None
 if args.ep == "rocm":
-    execution_provider = "ROCmExecutionProvider"
+    execution_provider = "ROCMExecutionProvider"
 elif args.ep == "migx":
     execution_provider = "MIGraphXExecutionProvider"
 elif args.ep == "cuda":
     execution_provider = "CUDAExecutionProvider"
 elif args.ep == "openvino":
     execution_provider = "OpenVINOExecutionProvider"
+elif args.ep == "cpu":
+    execution_provider = "CPUExecutionProvider"
     
 # Set the model
 model_name = None
