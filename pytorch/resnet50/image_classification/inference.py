@@ -1,17 +1,29 @@
 import torch
 from torchvision import transforms
 import time
+import argparse
 from PIL import Image
+
+# Parse command-line arguments for precision
+parser = argparse.ArgumentParser(description="Precision options for ResNet50 inference")
+parser.add_argument(
+    "--precision",
+    type=str,
+    choices=["fp32", "fp16", "mixed"],
+    default="fp32",
+    help="Set the precision level for inference: fp32, fp16, mixed"
+)
+args = parser.parse_args()
 
 # Read the categories
 with open("imagenet_classes.txt", "r") as f:
     categories = [s.strip() for s in f.readlines()]
 
-# Load the pre-trained ResNet50 model
+# Download the pre-trained ResNet50 model
 model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet50', weights='ResNet50_Weights.DEFAULT')
 model.eval()
 
-# Pre-process image for inference - sample execution (requires torchvision)
+# Pre-process image for inference
 filename = 'cat.jpg'
 input_image = Image.open(filename)
 preprocess = transforms.Compose([
@@ -21,30 +33,44 @@ preprocess = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 input_tensor = preprocess(input_image)
+
+# If fp16, adjust model and input tensor accordingly
+if args.precision == "fp16":
+    print("Inferencing in FP16 mode...")
+    model = model.half()
+    input_tensor = input_tensor.half()
+
+# Adjust tensor size for model (all precisions)
 input_batch = input_tensor.unsqueeze(0)
 
-# Move the input and model to GPU for speed if available
+# Move the input and model to the GPU
 if torch.cuda.is_available():
     input_batch = input_batch.to('cuda')
     model.to('cuda')
 else:
     print("GPU unavailable. Defaulting to the CPU.")
 
-# Warm-up run to load model and data onto GPU first
+# Warm-up run to load model and data onto the GPU
 with torch.no_grad():
-    with torch.autocast('cuda', dtype=torch.float16):  # Enable AMP for warm-up
+    if args.precision == "mixed":
+        with torch.autocast('cuda', dtype=torch.float16):
+            output = model(input_batch)
+    else:
         output = model(input_batch)
 
 # Perform inference and record time
 latency = []
-torch.cuda.synchronize()  # Ensure GPU is ready before timing
+torch.cuda.synchronize()
 start = time.time()
 
-with torch.no_grad():
-    with torch.autocast('cuda', dtype=torch.float16):  # Enable AMP for inference
+if args.precision == "mixed":
+    with torch.autocast('cuda', dtype=torch.float16):
+        output = model(input_batch)
+else:
+    with torch.no_grad():
         output = model(input_batch)
 
-torch.cuda.synchronize()  # Ensure all GPU work is done before stopping the timer
+torch.cuda.synchronize()
 end = time.time()
 latency.append(end - start)
 
@@ -56,4 +82,4 @@ top5_prob, top5_catid = torch.topk(probabilities, 5)
 for i in range(top5_prob.size(0)):
     print(categories[top5_catid[i]], top5_prob[i].item())
 
-print("PyTorch Inference Time = {} ms\n".format(format(sum(latency) * 1000 / len(latency), '.2f')))
+print("Inference Time = {} ms\n".format(format(sum(latency) * 1000 / len(latency), '.2f')))
