@@ -5,14 +5,34 @@ from tensorflow.keras.applications.inception_v3 import preprocess_input, decode_
 import numpy as np
 import time
 
+# Parse command-line arguments for precision
+parser = argparse.ArgumentParser(description="Precision options for InceptionV3 inference")
+parser.add_argument(
+    "--precision",
+    type=str,
+    choices=["fp32", "fp16", "mixed"],
+    default="fp32",
+    help="Set the precision level for inference: fp32, fp16, mixed"
+)
+args = parser.parse_args()
+
 # Load the pre-trained InceptionV3 model
 model = InceptionV3(weights='imagenet')
 
-# Check for GPU utilization
-if tf.test.is_gpu_available():
-    print("GPU is available. TensorFlow is using GPU for inference.")
-else:
-    print("GPU is not available. TensorFlow is using CPU for inference.")
+# Additional steps for FP16 mode:
+if args.precision == "fp16":
+    # Enable GPU mem growth
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+            
+    # Convert the model to fp16
+    converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.target_spec.supported_types = [tf.float16]
+    fp16_model = converter.convert()
+    print("Model converted to FP16")
 
 # Pre-process image for inference
 filename = 'cat.jpg'
@@ -21,8 +41,22 @@ x = image.img_to_array(img)
 x = np.expand_dims(x, axis=0)
 x = preprocess_input(x)
 
+# Check for GPU utilization
+if tf.test.is_gpu_available():
+    print("GPU is available. TensorFlow is using GPU for inference.")
+else:
+    raise RuntimeError("GPU is not available.")
+
 # Warm-up run to load model and data
-output = model.predict(x)
+if args.precision == "fp16":
+    interpreter = tf.lite.Interpreter(model_content=fp16_model)
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    interpreter.set_tensor(input_details[0]['index'], x)
+    interpreter.invoke()
+else:
+    output = model.predict(x)
 
 # Perform benchmark after warmup and measure inference time
 latency = []
@@ -37,4 +71,4 @@ latency.append(end - start)
 for i in range(5):
     print(decode_predictions(output, top=5)[0][i])
 
-print("TensorFlow Inference Time = {} ms\n".format(format(sum(latency) * 1000 / len(latency), '.2f')))
+print("Inference Time = {} ms\n".format(format(sum(latency) * 1000 / len(latency), '.2f')))
