@@ -4,7 +4,7 @@ import torch
 import triton
 
 # Tensor size (1GB)
-tensor_size = 2 * 1024**3
+tensor_size = 1 * 1024**3
 dtype = torch.float32
 num_elements = tensor_size
 
@@ -24,3 +24,5 @@ bandwidth_gbps = (tensor_size * 2) / (time_ms * 1e-3) / 1e9 #multiply by 2 for r
 
 # Print results
 print(f"Copy Bandwidth: {bandwidth_gbps:.2f} GB/s (time: {time_ms:.2f} ms)")
+
+# Need to have a closer look on the function of tensor copy, if its being copied within the memory or across CPU-PCIE-GPU
