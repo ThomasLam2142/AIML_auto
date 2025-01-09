@@ -11,8 +11,8 @@ import tensorflow as tf
 
 image_size = [224, 224]
 
-train_folder = "./train"
-val_folder = "./val"
+train_folder = "./train_images/train"
+val_folder = "./train_images/val"
 
 # Initialize the MirroredStrategy
 cross_device_ops = tf.distribute.ReductionToOneDevice()
@@ -27,7 +27,7 @@ with strategy.scope():
         layer.trainable = False
 
     # Collect class names from training folder
-    classes = glob('./train/*')
+    classes = glob('./train_images/train/*')
     print("Classes available:")
     print(classes)
 

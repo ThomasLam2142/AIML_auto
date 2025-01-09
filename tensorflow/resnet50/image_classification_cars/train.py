@@ -13,8 +13,8 @@ import tensorflow as tf
 
 image_size = [224,224]
 
-train_folder = "./train"
-val_folder = "./val"
+train_folder = "./train_images/train"
+val_folder = "./train_images/val"
 
 resnet_model = ResNet50(input_shape = image_size+[3], weights = 'imagenet', include_top = False)
 print (resnet_model.summary())
@@ -23,7 +23,7 @@ for layer in resnet_model.layers:
     layer.trainable = False
 
 # collect class names from training folder
-classes = glob('./train/*')
+classes = glob('./train_images/train/*')
 print("Classes available:")
 print(classes)
 
