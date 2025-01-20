@@ -9,9 +9,9 @@ parser = argparse.ArgumentParser(description="Precision options for InceptionV3 
 parser.add_argument(
     "--precision",
     type=str,
-    choices=["fp32", "fp16", "mixed"],
+    choices=["fp32", "fp16", "mixed", "int8"],
     default="fp32",
-    help="Set the precision level for inference: fp32, fp16, mixed"
+    help="Set the precision level for inference: fp32, fp16, mixed, int8"
 )
 parser.add_argument(
     "--ep",
@@ -43,6 +43,8 @@ elif args.precision == "fp16":
     model_name = "bert_mc_model_fp16.onnx"
 elif args.precision == "mixed":
     model_name = "bert_mc_model_mixed.onnx"
+elif args.precision == "int8":
+    model_name = "bert_mc_model_int8.onnx"
 
 # Create a prompt and two candidate answers
 prompt = "France has a bread law, Le Decret Pain, with strict rules on what is allowed in a traditional baguette."
