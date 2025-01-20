@@ -9,9 +9,9 @@ parser = argparse.ArgumentParser(description="Precision options for InceptionV3 
 parser.add_argument(
     "--precision",
     type=str,
-    choices=["fp32", "fp16", "mixed"],
+    choices=["fp32", "fp16", "mixed", "int8"],
     default="fp32",
-    help="Set the precision level for inference: fp32, fp16, mixed"
+    help="Set the precision level for inference: fp32, fp16, mixed, int8"
 )
 parser.add_argument(
     "--ep",
@@ -43,12 +43,14 @@ elif args.precision == "fp16":
     model_name = "bert_tc_model_fp16.onnx"
 elif args.precision == "mixed":
     model_name = "bert_tc_model_mixed.onnx"
+elif args.precision == "int8":
+    model_name = "bert_tc_model_int8.onnx"
 
 # Text to be analyzed
 text = "This was a masterpiece. Not completely faithful to the books, but enthralling from beginning to end. Might be my favorite of the three."
 
 # Load the tokenizer
-tokenizer = AutoTokenizer.from_pretrained("bert_tc_model/checkpoint-1564")
+tokenizer = AutoTokenizer.from_pretrained("bert_tc_model/checkpoint-782")
 
 # Tokenize the input text and return tensors
 inputs = tokenizer(text, return_tensors="np", max_length=7, padding='max_length', truncation=True)
@@ -80,7 +82,7 @@ logits = outputs[0]
 num_classes = logits.shape[-1]
 
 # Load model configuration to get labels
-config = AutoConfig.from_pretrained("bert_tc_model/checkpoint-1564")
+config = AutoConfig.from_pretrained("bert_tc_model/checkpoint-782")
 id2label = config.id2label
 
 # Get the class with the highest probability and map the output to a label

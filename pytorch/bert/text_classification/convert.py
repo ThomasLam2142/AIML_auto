@@ -3,7 +3,7 @@ import onnx
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 # Path to the trained model
-model_path = "bert_tc_model/checkpoint-3126"
+model_path = "bert_tc_model/checkpoint-782"
 
 # Load the trained model and tokenzier
 model = AutoModelForSequenceClassification.from_pretrained(model_path)
@@ -20,7 +20,7 @@ torch.onnx.export(
     input,                                          # model input
     "bert_tc_model.onnx",                           # where to save the model
     export_params=True,                             # store the trained parameter weights inside the model file
-    opset_version=11,                               # ONNX version to export model to
+    opset_version=14,                               # ONNX version to export model to
     do_constant_folding=True,                       # constant folding for optimizations
     input_names=['input'],                          # ONNX model input name
     output_names=['output'],                        # ONNX model output name
