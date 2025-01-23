@@ -18,7 +18,7 @@ args = parser.parse_args()
 swag = load_dataset("swag", "regular")
 
 # Load BERT tokenizer to process the sentence starts and four possible endings
-tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
 # Define preprocess function
 ending_names = ["ending0", "ending1", "ending2", "ending3"]
@@ -39,10 +39,9 @@ def preprocess_function(examples):
 # Apply preprocessing function over the entire dataset
 tokenized_swag = swag.map(preprocess_function, batched=True)
 
-# Create examples - Transformers library doesn't offer data collating for multiple choice. 
+# Create examples - Transformers library doesn't offer data collating for multiple choice.
 @dataclass
 class DataCollatorForMultipleChoice:
-
     tokenizer: PreTrainedTokenizerBase
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
@@ -79,7 +78,7 @@ def compute_metrics(eval_pred):
     return accuracy.compute(predictions=predictions, references=labels)
 
 # Load model
-model = AutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
+model = AutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
 
 # Set up TrainingArguments
 training_args = TrainingArguments(
@@ -98,7 +97,7 @@ training_args = TrainingArguments(
 
 # Define Trainer class with mixed precision support
 class CustomTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         if args.amp:
             with torch.cuda.amp.autocast():
                 outputs = model(**inputs)
