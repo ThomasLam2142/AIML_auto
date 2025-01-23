@@ -5,15 +5,17 @@ import numpy as np
 import onnxruntime
 import time
 import argparse
+import requests
+import os
 
 # Parse command-line arguments for precision
 parser = argparse.ArgumentParser(description="Precision options for InceptionV3 inference")
 parser.add_argument(
     "--precision",
     type=str,
-    choices=["fp32", "fp16", "mixed"],
+    choices=["fp32", "fp16", "mixed", "int8"],
     default="fp32",
-    help="Set the precision level for inference: fp32, fp16, mixed"
+    help="Set the precision level for inference: fp32, fp16, mixed, or int8"
 )
 parser.add_argument(
     "--ep",
@@ -45,6 +47,23 @@ elif args.precision == "fp16":
     model_name = "resnet50_model_fp16.onnx"
 elif args.precision == "mixed":
     model_name = "resnet50_model_mixed.onnx"
+elif args.precision == "int8":
+    model_name = "resnet50-v1-12-int8.onnx"
+
+# Download INT8 model from ONNX Model Zoo
+output_file = "resnet50-v1-12-int8.onnx"
+
+if args.precision == "int8":
+    if not os.path.exists(output_file):    
+        try:
+            url = "https://github.com/onnx/models/raw/refs/heads/main/validated/vision/classification/resnet/model/resnet50-v1-12-int8.onnx?download="
+            response = requests.get(url)
+            response.raise_for_status()
+            with open(output_file, "wb") as file:
+                file.write(response.content)
+            print(f"ResNet50 INT8 ONNX model downloaded successfully")
+        except requests.exceptions.RequestException as e:
+            print(f"Error occured: {e}")
 
 # Read the categories
 with open("imagenet_classes.txt", "r") as f:
@@ -81,10 +100,16 @@ if args.precision == "fp16":
 # Set Execution Provider for ONNX Runtime
 session = onnxruntime.InferenceSession(model_name, providers=[execution_provider])
 
+# Set input name
+if args.precision == "int8":
+    input_label = 'data'
+else:
+    input_label = 'input.1'
+
 # Warm up run to load model and data onto the GPU
 if torch.cuda.is_available():
     input_batch = input_batch.cpu()
-ort_outputs = session.run([], {'input.1': input_batch.numpy()})[0]
+ort_outputs = session.run([], {input_label: input_batch.numpy()})[0]
 
 # Run inference with ONNX Runtime
 latency = []
@@ -93,7 +118,7 @@ start = time.time()
 
 if torch.cuda.is_available():
     input_batch = input_batch.cpu()
-ort_outputs = session.run([], {'input.1': input_batch.numpy()})[0]
+ort_outputs = session.run([], {input_label: input_batch.numpy()})[0]
 
 torch.cuda.synchronize()
 end = time.time()
