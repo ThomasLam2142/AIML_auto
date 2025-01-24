@@ -4,83 +4,63 @@ import torch
 from transformers import AutoTokenizer
 import time
 
-# Parse command-line arguments for precision
-parser = argparse.ArgumentParser(description="Precision options for InceptionV3 inference")
-parser.add_argument(
-    "--precision",
-    type=str,
-    choices=["fp32", "fp16", "mixed", "int8"],
-    default="fp32",
-    help="Set the precision level for inference: fp32, fp16, mixed, int8"
-)
-parser.add_argument(
-    "--ep",
-    type=str,
-    choices=["rocm", "migx", "cuda", "openvino"],
-    default="rocm",
-    help="Set the execution provider for inference: rocm, migx, cuda, openvino, cpu"
-)
+# Parse command-line arguments for precision and execution provider
+parser = argparse.ArgumentParser(description="Inference script for BERT-based multiple choice with ONNX models")
+parser.add_argument("--precision", type=str, choices=["fp32", "fp16", "mixed", "int8"], default="fp32",
+                    help="Set the precision level for inference: fp32, fp16, mixed, int8")
+parser.add_argument("--ep", type=str, choices=["rocm", "migx", "cuda", "openvino", "cpu"], default="rocm",
+                    help="Set the execution provider for inference: rocm, migx, cuda, openvino")
 args = parser.parse_args()
 
-# Set the execution provider
-execution_provider = None
-if args.ep == "rocm":
-    execution_provider = "ROCMExecutionProvider"
-elif args.ep == "migx":
-    execution_provider = "MIGraphXExecutionProvider"
-elif args.ep == "cuda":
-    execution_provider = "CUDAExecutionProvider"
-elif args.ep == "openvino":
-    execution_provider = "OpenVINOExecutionProvider"
-elif args.ep == "cpu":
-    execution_provider = "CPUExecutionProvider"
+# Map execution providers
+execution_provider_map = {
+    "rocm": "ROCMExecutionProvider",
+    "migx": "MIGraphXExecutionProvider",
+    "cuda": "CUDAExecutionProvider",
+    "openvino": "OpenVINOExecutionProvider",
+    "cpu": "CPUExecutionProvider"
+}
+execution_provider = execution_provider_map[args.ep]
 
-# Set the model
-model_name = None
-if args.precision == "fp32":
-    model_name = "bert_mc_model.onnx"
-elif args.precision == "fp16":
-    model_name = "bert_mc_model_fp16.onnx"
-elif args.precision == "mixed":
-    model_name = "bert_mc_model_mixed.onnx"
-elif args.precision == "int8":
-    model_name = "bert_mc_model_int8.onnx"
+# Map precision levels to model filenames
+model_map = {
+    "fp32": "bert_mc_model.onnx",
+    "fp16": "bert_mc_model_fp16.onnx",
+    "mixed": "bert_mc_model_mixed.onnx",
+    "int8": "bert_mc_model_int8.onnx"
+}
+model_name = model_map[args.precision]
 
-# Create a prompt and two candidate answers
+# Define prompt and candidate answers
 prompt = "France has a bread law, Le Decret Pain, with strict rules on what is allowed in a traditional baguette."
 candidate1 = "The law applies to baguettes."
 candidate2 = "The law applies to automotive manufacturing."
-
 candidates = [candidate1, candidate2]
 
-# Load the tokenizer
+# Load tokenizer and tokenize inputs
 tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-
-# Tokenize the input text and return tensors
 inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors="pt", padding=True)
 
-# Prepare the inputs for ONNX Runtime
+# Prepare inputs for ONNX Runtime
 ort_inputs = {k: v.unsqueeze(0).numpy() for k, v in inputs.items()}
 
-# Load the ONNX model
+# Load ONNX model and set up the inference session
 ort_session = ort.InferenceSession(model_name, providers=[execution_provider])
 
-# Warmup run
+# Warm-up run
 _ = ort_session.run(None, ort_inputs)
 
 # Measure inference time
 start_time = time.time()
 ort_outs = ort_session.run(None, ort_inputs)
 end_time = time.time()
+inference_time = (end_time - start_time) * 1000
 
-# Get the logits from the output
+# Process outputs and determine predicted class
 logits = torch.tensor(ort_outs[0])
-
-# Get the class with the highest probability
 predicted_class = logits.argmax().item()
+
+# Print results
 print(f"Prompt: {prompt}")
 print(f"Answer: {candidates[predicted_class]}")
-
-# Calculate and display inference time
-inference_time = end_time - start_time
-print(f"Inference Time = {inference_time:.4f} seconds")
+print(f"Inference Time = {inference_time:.2f} ms")

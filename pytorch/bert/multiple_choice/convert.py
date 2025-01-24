@@ -3,7 +3,7 @@ import torch
 import onnx
 
 # Load the trained model and tokenizer
-model_path = "bert_mc_model/checkpoint-13791"
+model_path = "bert_mc_model/checkpoint-3450"
 tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 model = AutoModelForMultipleChoice.from_pretrained(model_path)
 
