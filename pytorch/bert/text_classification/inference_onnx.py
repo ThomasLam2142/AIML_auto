@@ -4,91 +4,65 @@ import onnxruntime as ort
 import numpy as np
 from transformers import AutoTokenizer, AutoConfig
 
-# Parse command-line arguments for precision
-parser = argparse.ArgumentParser(description="Precision options for InceptionV3 inference")
-parser.add_argument(
-    "--precision",
-    type=str,
-    choices=["fp32", "fp16", "mixed", "int8"],
-    default="fp32",
-    help="Set the precision level for inference: fp32, fp16, mixed, int8"
-)
-parser.add_argument(
-    "--ep",
-    type=str,
-    choices=["rocm", "migx", "cuda", "openvino"],
-    default="rocm",
-    help="Set the execution provider for inference: rocm, migx, cuda, openvino, cpu"
-)
+# Parse command-line arguments for precision and execution provider
+parser = argparse.ArgumentParser(description="Inference script for BERT-based sentiment analysis with ONNX models")
+parser.add_argument("--precision", type=str, choices=["fp32", "fp16", "mixed", "int8"], default="fp32",
+                    help="Set the precision level for inference: fp32, fp16, mixed, int8")
+parser.add_argument("--ep", type=str, choices=["rocm", "migx", "cuda", "openvino", "cpu"], default="rocm",
+                    help="Set the execution provider for inference: rocm, migx, cuda, openvino, cpu")
 args = parser.parse_args()
 
-# Set the execution provider
-execution_provider = None
-if args.ep == "rocm":
-    execution_provider = "ROCMExecutionProvider"
-elif args.ep == "migx":
-    execution_provider = "MIGraphXExecutionProvider"
-elif args.ep == "cuda":
-    execution_provider = "CUDAExecutionProvider"
-elif args.ep == "openvino":
-    execution_provider = "OpenVINOExecutionProvider"
-elif args.ep == "cpu":
-    execution_provider = "CPUExecutionProvider"
+# Map execution providers
+execution_provider_map = {
+    "rocm": "ROCMExecutionProvider",
+    "migx": "MIGraphXExecutionProvider",
+    "cuda": "CUDAExecutionProvider",
+    "openvino": "OpenVINOExecutionProvider",
+    "cpu": "CPUExecutionProvider"
+}
+execution_provider = execution_provider_map[args.ep]
 
-# Set the model
-model_name = None
-if args.precision == "fp32":
-    model_name = "bert_tc_model.onnx"
-elif args.precision == "fp16":
-    model_name = "bert_tc_model_fp16.onnx"
-elif args.precision == "mixed":
-    model_name = "bert_tc_model_mixed.onnx"
-elif args.precision == "int8":
-    model_name = "bert_tc_model_int8.onnx"
+# Map precision levels to model filenames
+model_map = {
+    "fp32": "bert_tc_model.onnx",
+    "fp16": "bert_tc_model_fp16.onnx",
+    "mixed": "bert_tc_model_mixed.onnx",
+    "int8": "bert_tc_model_int8.onnx"
+}
+model_name = model_map[args.precision]
 
-# Text to be analyzed
+# Input text for analysis
 text = "This was a masterpiece. Not completely faithful to the books, but enthralling from beginning to end. Might be my favorite of the three."
 
-# Load the tokenizer
+# Load tokenizer and tokenize the input text
 tokenizer = AutoTokenizer.from_pretrained("bert_tc_model/checkpoint-782")
-
-# Tokenize the input text and return tensors
 inputs = tokenizer(text, return_tensors="np", max_length=7, padding='max_length', truncation=True)
 
-# Load the ONNX model
+# Load ONNX model and set up the inference session
 onnx_model_path = model_name
 session = ort.InferenceSession(onnx_model_path, providers=[execution_provider])
 
-# Prepare ONNX input
-inputs_onnx = {
-    'input': inputs['input_ids']
-}
+# Prepare ONNX inputs
+inputs_onnx = {"input": inputs["input_ids"]}
 
-# Warmup run (not timed)
-_ = session.run(None, inputs_onnx)
+# Warm-up run (not timed)
+session.run(None, inputs_onnx)
 
 # Measure inference time
 start_time = time.time()
 outputs = session.run(None, inputs_onnx)
 end_time = time.time()
+time_ms = (end_time - start_time) * 1000
 
-# Calculate elapsed time
-inference_time = end_time - start_time
-
-# Get the logits from the output
+# Process outputs
 logits = outputs[0]
+predicted_class_id = np.argmax(logits, axis=-1).item()
 
-# Assuming logits shape is [batch_size, num_classes]
-num_classes = logits.shape[-1]
-
-# Load model configuration to get labels
+# Load model configuration and map output to label
 config = AutoConfig.from_pretrained("bert_tc_model/checkpoint-782")
 id2label = config.id2label
-
-# Get the class with the highest probability and map the output to a label
-predicted_class_id = np.argmax(logits, axis=-1).item()
 output_label = id2label[predicted_class_id]
 
 # Print the result
-print(output_label)
-print(f"Inference Time = {inference_time:.4f} seconds")
+print(f"Sentiment: {output_label}")
+print(f"Inference Time = {time_ms:.2f} ms")
