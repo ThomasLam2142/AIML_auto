@@ -3,69 +3,49 @@ import time
 import onnxruntime as ort
 from transformers import AutoTokenizer
 
-# Parse command-line arguments for precision
-parser = argparse.ArgumentParser(description="Precision options for InceptionV3 inference")
-parser.add_argument(
-    "--precision",
-    type=str,
-    choices=["fp32", "fp16", "mixed", "int8"],
-    default="fp32",
-    help="Set the precision level for inference: fp32, fp16, mixed, int8"
-)
-parser.add_argument(
-    "--ep",
-    type=str,
-    choices=["rocm", "migx", "cuda", "openvino"],
-    default="rocm",
-    help="Set the execution provider for inference: rocm, migx, cuda, openvino, cpu"
-)
+# Parse command-line arguments for precision and execution provider
+parser = argparse.ArgumentParser(description="Inference script for BERT-based Q&A with ONNX models")
+parser.add_argument("--precision", type=str, choices=["fp32", "fp16", "mixed", "int8"], default="fp32",
+                    help="Set the precision level for inference: fp32, fp16, mixed, int8")
+parser.add_argument("--ep", type=str, choices=["rocm", "migx", "cuda", "openvino", "cpu"], default="rocm",
+                    help="Set the execution provider for inference: rocm, migx, cuda, openvino, cpu")
 args = parser.parse_args()
 
-# Set the execution provider
-execution_provider = None
-if args.ep == "rocm":
-    execution_provider = "ROCMExecutionProvider"
-elif args.ep == "migx":
-    execution_provider = "MIGraphXExecutionProvider"
-elif args.ep == "cuda":
-    execution_provider = "CUDAExecutionProvider"
-elif args.ep == "openvino":
-    execution_provider = "OpenVINOExecutionProvider"
-elif args.ep == "cpu":
-    execution_provider = "CPUExecutionProvider"
-    
-# Set the model
-model_name = None
-if args.precision == "fp32":
-    model_name = "distilbert_qa_model.onnx"
-elif args.precision == "fp16":
-    model_name = "distilbert_qa_model_fp16.onnx"
-elif args.precision == "mixed":
-    model_name = "distilbert_qa_model_mixed.onnx"
-elif args.precision == "int8":
-    model_name = "distilbert_qa_model_int8.onnx"
+# Map execution providers
+execution_provider_map = {
+    "rocm": "ROCMExecutionProvider",
+    "migx": "MIGraphXExecutionProvider",
+    "cuda": "CUDAExecutionProvider",
+    "openvino": "OpenVINOExecutionProvider",
+    "cpu": "CPUExecutionProvider"
+}
+execution_provider = execution_provider_map[args.ep]
 
-# Create a question and context
-question = "What is my name?"
-context = "My name is Mern and I live in Barcelona"
+# Map precision levels to model filenames
+model_map = {
+    "fp32": "distilbert_qa_model.onnx",
+    "fp16": "distilbert_qa_model_fp16.onnx",
+    "mixed": "distilbert_qa_model_mixed.onnx",
+    "int8": "distilbert_qa_model_int8.onnx"
+}
+model_name = model_map[args.precision]
 
-# Load the tokenizer
+# Load tokenizer and prepare input
 tokenizer = AutoTokenizer.from_pretrained("distilbert_qa_model/checkpoint-500")
-
-# Tokenize the input text and return tensors
+question = "Where does Mern live?"
+context = "My name is Mern and I live in Barcelona"
 inputs = tokenizer(question, context, return_tensors="pt")
 
-# Load the ONNX model
-onnx_path = model_name
-ort_session = ort.InferenceSession(onnx_path, providers=[execution_provider])
+# Load ONNX model and set up the inference session
+ort_session = ort.InferenceSession(model_name, providers=[execution_provider])
 
-# Prepare inputs for ONNX model
+# Prepare ONNX inputs
 ort_inputs = {
-    'input_ids': inputs['input_ids'].numpy(),
-    'attention_mask': inputs['attention_mask'].numpy()
+    "input_ids": inputs["input_ids"].numpy(),
+    "attention_mask": inputs["attention_mask"].numpy()
 }
 
-# Warmup run
+# Warm-up run
 ort_session.run(None, ort_inputs)
 
 # Measure inference time
@@ -73,21 +53,17 @@ start_time = time.time()
 ort_outputs = ort_session.run(None, ort_inputs)
 end_time = time.time()
 
-# Calculate and format inference time
-inference_time = end_time - start_time
-
-# Get the start and end logits
-start_logits = ort_outputs[0]
-end_logits = ort_outputs[1]
-
-# Get the most likely beginning and end of answer
+# Process outputs
+start_logits, end_logits = ort_outputs
 answer_start_index = start_logits.argmax()
 answer_end_index = end_logits.argmax()
-
-# Get the answer tokens and decode them
-predict_answer_tokens = inputs['input_ids'][0, answer_start_index:answer_end_index + 1]
+predict_answer_tokens = inputs["input_ids"][0, answer_start_index:answer_end_index + 1]
 answer = tokenizer.decode(predict_answer_tokens)
 
+# Convert time to ms
+time_ms = (end_time - start_time) * 1000
+
+# Print results
 print(f"Question: {question}")
 print(f"Answer: {answer}")
-print(f"Inference Time = {inference_time:.4f} seconds")
+print(f"Inference Time = {time_ms:.2f} ms")
