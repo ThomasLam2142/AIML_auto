@@ -6,14 +6,18 @@ import argparse
 from transformers import FlaxResNetForImageClassification
 from PIL import Image
 
-# Confirm GPU detection and usage
-print(jax.devices())
-
 # Command-line argument parsing
 parser = argparse.ArgumentParser(description="Run inference with different precisions.")
-parser.add_argument('--precision', choices=['fp32', 'fp16'], default='fp32',
-                    help="Precision mode for inference: 'fp32' (default), or 'fp16'")
+parser.add_argument('--precision', choices=['fp32', 'fp16', 'mixed'], default='fp32',
+                    help="Precision mode for inference: 'fp32' (default), 'fp16', or 'mixed'")
 args = parser.parse_args()
+
+# Confirm GPU detection and usage
+print(f"Detected GPU(s): {jax.devices()}")
+
+# Mixed precision - operands of matrix mul in FP16, accumulation in FP32
+if args.precision == 'mixed':
+    jax.config.update("jax_default_matmul_precision", "F16_F16_F32")
 
 # Load model
 model = FlaxResNetForImageClassification.from_pretrained("microsoft/resnet-50")
