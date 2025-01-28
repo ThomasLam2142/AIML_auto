@@ -2,11 +2,28 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import time
+import argparse
 from transformers import FlaxResNetForImageClassification
 from PIL import Image
 
+# Confirm GPU detection and usage
+print(jax.devices())
+
+# Command-line argument parsing
+parser = argparse.ArgumentParser(description="Run inference with different precisions.")
+parser.add_argument('--precision', choices=['fp32', 'fp16'], default='fp32',
+                    help="Precision mode for inference: 'fp32' (default), or 'fp16'")
+args = parser.parse_args()
+
 # Load model
 model = FlaxResNetForImageClassification.from_pretrained("microsoft/resnet-50")
+
+# Convert model params to fp16 if selected
+if args.precision == 'fp16':
+    model.params = jax.tree.map(
+        lambda x: x.astype(jnp.float16) if x.dtype == jnp.float32 else x,
+        model.params
+    )
 
 # Function to preprocess image for ResNet50 model
 def preprocess_image(image_path):
@@ -21,10 +38,14 @@ def preprocess_image(image_path):
     # Add batch dimension and convert to JAX array
     return jnp.expand_dims(img.transpose(2, 0, 1), axis=0)
 
-# Inference
 image_path = "cat.jpg"
 input_image = preprocess_image(image_path)
 
+# Convert input image to fp16 if selected
+if args.precision == 'fp16':
+    input_image = input_image.astype(jnp.float16)
+
+# Inference
 _ = model(input_image)  # warm-up run
 
 start = time.time()
@@ -50,4 +71,4 @@ inference_time = (end - start) * 1000  # Convert to ms
 for label, prob in zip(top_k_labels, top_k_probs):
     print(f"{label}, {prob:.4f}")
     
-print(f"Inference time: {inference_time:.4f} ms")
+print(f"Inference Time: {inference_time:.2f} ms")
