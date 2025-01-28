@@ -5,6 +5,7 @@ import optax
 from datasets import load_dataset
 import numpy as np
 from flax import serialization
+import time  # Importing the time module
 
 # Load the dataset
 dataset = load_dataset("imdb")
@@ -80,8 +81,10 @@ def create_batches(dataset, batch_size):
 # Train and evaluate
 num_epochs = 3
 batch_size = 16
+total_start_time = time.time()  # Start the overall training timer
 
 for epoch in range(num_epochs):
+    epoch_start_time = time.time()  # Start the timer for this epoch
     print(f"Epoch {epoch + 1}/{num_epochs} started.")
     
     # Training loop
@@ -105,5 +108,13 @@ for epoch in range(num_epochs):
     avg_accuracy = np.mean(np.array(accuracies))
     print(f"Epoch {epoch + 1} Validation Accuracy: {avg_accuracy * 100:.2f}%")
     
+    epoch_end_time = time.time()  # End the timer for this epoch
+    epoch_duration = (epoch_end_time - epoch_start_time) / 60  # Convert to minutes
+    print(f"Epoch {epoch + 1} took {epoch_duration:.2f} minutes.")
+
+total_end_time = time.time()  # End the overall training timer
+total_duration = (total_end_time - total_start_time) / 60  # Convert to minutes
+print(f"Total training time: {total_duration:.2f} minutes.")
+
 # Save model
 model.save_pretrained("bert_tc")
