@@ -64,7 +64,7 @@ def main(args):
         learning_rate=2e-5,
         per_device_train_batch_size=args.batch_size // num_gpus if num_gpus > 0 else args.batch_size,
         per_device_eval_batch_size=args.batch_size // num_gpus if num_gpus > 0 else args.batch_size,
-        num_train_epochs=2,
+        num_train_epochs=args.epochs,
         weight_decay=0.01,
         evaluation_strategy="epoch",
         save_strategy="epoch",
