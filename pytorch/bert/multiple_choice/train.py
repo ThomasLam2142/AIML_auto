@@ -9,6 +9,7 @@ from transformers import (AutoTokenizer, AutoModelForMultipleChoice, TrainingArg
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
 from typing import Optional, Union
 import evaluate
+import os
 
 def main(args):
     # Set up device(s)
@@ -21,8 +22,11 @@ def main(args):
         raise RuntimeError(f"Requested {args.num_gpus} GPUs, but only {available_gpus} are available.")
     
     num_gpus = min(args.num_gpus, available_gpus)
-    device = torch.device("cuda")
-
+    
+    # Restrict visible GPUs
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, range(num_gpus)))
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using {num_gpus} GPU(s) for training.")
 
     # Load dataset and tokenizer
@@ -45,7 +49,12 @@ def main(args):
         tokenized_examples = tokenizer(first_sentences, second_sentences, truncation=True)
         return {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
     
+    # Apply preprocessing to the dataset
     tokenized_swag = swag.map(preprocess_function, batched=True)
+
+    # Debug: Print the structure of the first example in the dataset
+    print("First example in the tokenized dataset:")
+    print(tokenized_swag["train"][0])
 
     # Define data collator
     @dataclass
@@ -56,10 +65,19 @@ def main(args):
         pad_to_multiple_of: Optional[int] = None
     
         def __call__(self, features):
+            # Debug: Print the features to check for 'input_ids'
+            print("Features passed to the data collator:")
+            print(features)
+            
+            # Ensure that 'input_ids' is present in the features
+            if not features or "input_ids" not in features[0]:
+                raise ValueError("The 'input_ids' key is missing from the features.")
+            
             label_name = "label" if "label" in features[0] else "labels"
             labels = [feature.pop(label_name) for feature in features]
             batch_size = len(features)
             num_choices = len(features[0]["input_ids"])
+            
             flattened_features = [
                 [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
             ]
