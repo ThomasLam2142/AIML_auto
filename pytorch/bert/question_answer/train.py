@@ -1,3 +1,4 @@
+import os
 import argparse
 import time
 import torch
@@ -7,19 +8,16 @@ from transformers import (AutoTokenizer, AutoModelForQuestionAnswering,
                           DefaultDataCollator, TrainingArguments, Trainer)
 
 def main(args):
-    # Set up device(s)
+    # Set CUDA devices before initializing PyTorch
     available_gpus = torch.cuda.device_count()
-    
     if available_gpus == 0:
         raise RuntimeError("No GPUs available.")
-    
     if args.num_gpus > available_gpus:
         raise RuntimeError(f"Requested {args.num_gpus} GPUs, but only {available_gpus} are available.")
     
-    num_gpus = min(args.num_gpus, available_gpus)
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(args.num_gpus))
     device = torch.device("cuda")
-
-    print(f"Using {num_gpus} GPU(s) for training.")
+    print(f"Using {args.num_gpus} GPU(s) for training.")
 
     # Load dataset
     squad = load_dataset("squad", split="train[:5000]").train_test_split(test_size=0.2)
@@ -80,10 +78,6 @@ def main(args):
     
     # Load model
     model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-    
-    if num_gpus > 1:
-        model = torch.nn.DataParallel(model, device_ids=list(range(num_gpus)))
-    
     model.to(device)
     
     # Training Arguments
@@ -91,8 +85,8 @@ def main(args):
         output_dir="distilbert_qa_model",
         evaluation_strategy="epoch",
         learning_rate=2e-5,
-        per_device_train_batch_size=args.batch_size // num_gpus if num_gpus > 0 else args.batch_size,
-        per_device_eval_batch_size=args.batch_size // num_gpus if num_gpus > 0 else args.batch_size,
+        per_device_train_batch_size=args.batch_size // args.num_gpus,
+        per_device_eval_batch_size=args.batch_size // args.num_gpus,
         num_train_epochs=args.epochs,
         weight_decay=0.01,
         push_to_hub=False,
