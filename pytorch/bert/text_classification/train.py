@@ -1,6 +1,7 @@
 import argparse
 import time
 import numpy as np
+import os
 import torch
 from torch.utils.data import DataLoader
 from datasets import load_dataset
@@ -9,32 +10,26 @@ from transformers import (AutoTokenizer, AutoModelForSequenceClassification,
 import evaluate
 
 def main(args):
-    # Set up device(s)
+    # Restrict GPUs based on argument
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, range(args.num_gpus)))
+
+    # Check available GPUs
     available_gpus = torch.cuda.device_count()
     
     if available_gpus == 0:
         raise RuntimeError("No GPUs available.")
     
-    if args.num_gpus > available_gpus:
-        raise RuntimeError(f"Requested {args.num_gpus} GPUs, but only {available_gpus} are available.")
-    
-    num_gpus = min(args.num_gpus, available_gpus)
-    device = torch.device("cuda")
-
-    print(f"Using {num_gpus} GPU(s) for training.")
+    print(f"Using {args.num_gpus} GPU(s) for training.")
 
     # Load dataset and tokenizer
     imdb = load_dataset("imdb")
     tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 
     def preprocess_function(examples):
-        return tokenizer(examples["text"], truncation=True)
+        return tokenizer(examples["text"], padding="max_length", truncation=True)
 
     tokenized_imdb = imdb.map(preprocess_function, batched=True)
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
-    train_loader = DataLoader(tokenized_imdb["train"], batch_size=args.batch_size, shuffle=True, collate_fn=data_collator)
-    eval_loader = DataLoader(tokenized_imdb["test"], batch_size=args.batch_size, shuffle=False, collate_fn=data_collator)
 
     # Define model
     id2label = {0: "NEGATIVE", 1: "POSITIVE"}
@@ -43,12 +38,6 @@ def main(args):
     model = AutoModelForSequenceClassification.from_pretrained(
         "distilbert/distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
     )
-
-    # Wrap model in DataParallel if using multiple GPUs
-    if num_gpus > 1:
-        model = torch.nn.DataParallel(model, device_ids=list(range(num_gpus)))
-
-    model.to(device)
 
     # Load evaluation metric
     accuracy = evaluate.load("accuracy")
@@ -62,8 +51,8 @@ def main(args):
     training_args = TrainingArguments(
         output_dir="bert_tc_model",
         learning_rate=2e-5,
-        per_device_train_batch_size=args.batch_size // num_gpus if num_gpus > 0 else args.batch_size,
-        per_device_eval_batch_size=args.batch_size // num_gpus if num_gpus > 0 else args.batch_size,
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size,
         num_train_epochs=args.epochs,
         weight_decay=0.01,
         evaluation_strategy="epoch",
@@ -96,10 +85,10 @@ def main(args):
     print(f"Training completed in {elapsed_time:.2f} mins.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a DistilBERT model with DataParallel multi-GPU support.")
+    parser = argparse.ArgumentParser(description="Train a DistilBERT model with multi-GPU support.")
     parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision (AMP).')
     parser.add_argument('--num_gpus', type=int, default=1, help='Number of GPUs to use (default: 1).')
-    parser.add_argument('--batch_size', type=int, default=32, help='Total batch size (split across GPUs).')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size per device.')
     parser.add_argument('--epochs', type=int, default=2, help='Number of epochs to train (default: 2)')
     args = parser.parse_args()
 
