@@ -2,25 +2,17 @@ import argparse
 import time
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
 from datasets import load_dataset
 from dataclasses import dataclass
 from transformers import (AutoTokenizer, AutoModelForMultipleChoice, TrainingArguments, Trainer)
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
 from typing import Optional, Union
 import evaluate
-import os
+
+# For DataParallel, just run the script i.e. python3 train.py
+# For DistributedDataParallel, use torchrun i.e. torchrun nproc_per_node=<num_gpu> train.py
 
 def main(args):
-    # Set GPU devices
-    available_gpus = torch.cuda.device_count()
-    if args.num_gpus > available_gpus:
-        raise RuntimeError(f"Requested {args.num_gpus} GPUs, but only {available_gpus} are available.")
-    
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, range(args.num_gpus)))
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using {args.num_gpus} GPU(s) for training.")
-
     # Load dataset and tokenizer
     swag = load_dataset("swag", "regular")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
@@ -47,8 +39,6 @@ def main(args):
     
     tokenized_swag = swag.map(preprocess_function, batched=True)
 
-    #print("First example in the tokenized dataset:", tokenized_swag["train"][0])
-
     # Define data collator
     @dataclass
     class DataCollatorForMultipleChoice:
@@ -59,7 +49,6 @@ def main(args):
     
         def __call__(self, features):
             if not features or "input_ids" not in features[0]:
-                #print("Collator received features:", features)
                 raise ValueError("The 'input_ids' key is missing from the features.")
             
             label_name = "label" if "label" in features[0] else "labels"
@@ -87,7 +76,7 @@ def main(args):
     data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
     
     # Load model
-    model = AutoModelForMultipleChoice.from_pretrained("bert-base-uncased").to(device)
+    model = AutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
     
     # Define evaluation function
     accuracy = evaluate.load("accuracy")
@@ -136,10 +125,9 @@ def main(args):
     print(f"Training completed in {elapsed_time:.2f} mins.")
     
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a BERT model for multiple choice with multi-GPU support.")
+    parser = argparse.ArgumentParser(description="Train a BERT model for multiple choice.")
     parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision (AMP).')
-    parser.add_argument('--num_gpus', type=int, default=1, help='Number of GPUs to use (default: 1).')
-    parser.add_argument('--batch_size', type=int, default=16, help='Per-device batch size (default: 16).')
+    parser.add_argument('--batch_size', type=int, default=8, help='Per-device batch size (default: 16).')
     parser.add_argument('--epochs', type=int, default=3, help='Number of epochs to train (default: 3)')
     args = parser.parse_args()
     
