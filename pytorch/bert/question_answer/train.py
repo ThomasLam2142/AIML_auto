@@ -7,17 +7,17 @@ from datasets import load_dataset
 from transformers import (AutoTokenizer, AutoModelForQuestionAnswering,
                           DefaultDataCollator, TrainingArguments, Trainer)
 
+# Thanks to HuggingFace's trainer function, running DataParallel and DistributedDataParallel is simple:
+# For DataParallel, just run the script i.e. python3 train.py
+# For DistributedDataParallel, use torchrun i.e. torchrun nproc_per_node=<num_gpu> train.py
+
 def main(args):
-    # Set CUDA devices before initializing PyTorch
+    # Check available GPUs
     available_gpus = torch.cuda.device_count()
     if available_gpus == 0:
         raise RuntimeError("No GPUs available.")
-    if args.num_gpus > available_gpus:
-        raise RuntimeError(f"Requested {args.num_gpus} GPUs, but only {available_gpus} are available.")
     
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(args.num_gpus))
-    device = torch.device("cuda")
-    print(f"Using {args.num_gpus} GPU(s) for training.")
+    print(f"Using {available_gpus} GPU(s) for training.")
 
     # Load dataset
     squad = load_dataset("squad", split="train[:5000]").train_test_split(test_size=0.2)
@@ -78,15 +78,14 @@ def main(args):
     
     # Load model
     model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-    model.to(device)
     
     # Training Arguments
     training_args = TrainingArguments(
         output_dir="distilbert_qa_model",
         evaluation_strategy="epoch",
         learning_rate=2e-5,
-        per_device_train_batch_size=args.batch_size // args.num_gpus,
-        per_device_eval_batch_size=args.batch_size // args.num_gpus,
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size,
         num_train_epochs=args.epochs,
         weight_decay=0.01,
         push_to_hub=False,
@@ -115,10 +114,9 @@ def main(args):
     print(f"Training completed in {elapsed_time:.2f} mins.")
     
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a DistilBERT model for Question Answering with AMP and multi-GPU support.")
+    parser = argparse.ArgumentParser(description="Train a DistilBERT model for Question Answering with AMP.")
     parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision (AMP).')
-    parser.add_argument('--num_gpus', type=int, default=1, help='Number of GPUs to use (default: 1).')
-    parser.add_argument('--batch_size', type=int, default=16, help='Total batch size (split across GPUs).')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size per device.')
     parser.add_argument('--epochs', type=int, default=3, help='Number of epochs to train (default: 3)')
     args = parser.parse_args()
     
