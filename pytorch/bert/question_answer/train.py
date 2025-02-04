@@ -7,7 +7,6 @@ from datasets import load_dataset
 from transformers import (AutoTokenizer, AutoModelForQuestionAnswering,
                           DefaultDataCollator, TrainingArguments, Trainer)
 
-# Thanks to HuggingFace's trainer function, running DataParallel and DistributedDataParallel is simple:
 # For DataParallel, just run the script i.e. python3 train.py
 # For DistributedDataParallel, use torchrun i.e. torchrun nproc_per_node=<num_gpu> train.py
 
