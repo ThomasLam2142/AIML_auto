@@ -9,6 +9,9 @@ from transformers import (AutoTokenizer, AutoModelForSequenceClassification,
                           DataCollatorWithPadding, TrainingArguments, Trainer)
 import evaluate
 
+# For DataParallel, just run the script i.e. python3 train.py
+# For DistributedDataParallel, use torchrun i.e. torchrun --nproc_per_node=<num_gpu> train.py
+
 def main(args):
     # Load dataset and tokenizer
     imdb = load_dataset("imdb")
