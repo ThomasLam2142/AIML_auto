@@ -10,17 +10,6 @@ from transformers import (AutoTokenizer, AutoModelForSequenceClassification,
 import evaluate
 
 def main(args):
-    # Restrict GPUs based on argument
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, range(args.num_gpus)))
-
-    # Check available GPUs
-    available_gpus = torch.cuda.device_count()
-    
-    if available_gpus == 0:
-        raise RuntimeError("No GPUs available.")
-    
-    print(f"Using {args.num_gpus} GPU(s) for training.")
-
     # Load dataset and tokenizer
     imdb = load_dataset("imdb")
     tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
@@ -59,7 +48,8 @@ def main(args):
         save_strategy="epoch",
         load_best_model_at_end=True,
         push_to_hub=False,
-        fp16=args.amp
+        fp16=args.amp,
+        ddp_find_unused_parameters=False  # Enable DDP
     )
 
     trainer = Trainer(
@@ -87,7 +77,6 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a DistilBERT model with multi-GPU support.")
     parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision (AMP).')
-    parser.add_argument('--num_gpus', type=int, default=1, help='Number of GPUs to use (default: 1).')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size per device.')
     parser.add_argument('--epochs', type=int, default=2, help='Number of epochs to train (default: 2)')
     args = parser.parse_args()
