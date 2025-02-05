@@ -1,100 +1,97 @@
-from tensorflow.keras.layers import Input, Lambda, Dense, Flatten
-from tensorflow.keras.models import Model
-from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
-from tensorflow.keras.preprocessing import image
-from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img
-from tensorflow.keras.models import Sequential
-import numpy as np
-from glob import glob
-import matplotlib.pyplot as plt
-import scipy
 import time
+import os
+import argparse
 import tensorflow as tf
+from tensorflow.keras.layers import Flatten, Dense
+from tensorflow.keras.models import Model
+from tensorflow.keras.applications.resnet50 import ResNet50
 
-image_size = [224,224]
+# Parse command-line arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("--amp", action="store_true", help="Enable mixed precision training")
+args = parser.parse_args()
 
+# Initialize MirroredStrategy for multi-GPU training
+strategy = tf.distribute.MirroredStrategy()
+print("Number of devices:", strategy.num_replicas_in_sync)
+
+# Enable mixed precision if --amp is passed
+if args.amp:
+    from tensorflow.keras.mixed_precision import set_global_policy
+    set_global_policy('mixed_float16')
+    print("Mixed precision training enabled.")
+
+image_size = [224, 224]
 train_folder = "./train_images/train"
 val_folder = "./train_images/val"
 
-resnet_model = ResNet50(input_shape = image_size+[3], weights = 'imagenet', include_top = False)
-print (resnet_model.summary())
-
-for layer in resnet_model.layers:
-    layer.trainable = False
-
-# collect class names from training folder
-classes = glob('./train_images/train/*')
-print("Classes available:")
-print(classes)
-
+# Get number of classes from training folder
+classes = sorted(os.listdir(train_folder))
 classes_num = len(classes)
-print("Number of classes: ", classes_num)
+print(f"Classes found: {classes}, Number of classes: {classes_num}")
 
-# flatten layer
-flat_layer = Flatten()(resnet_model.output)
+# Function to apply one-hot encoding to dataset labels
+def preprocess_dataset(dataset, num_classes):
+    """ Convert integer labels to one-hot encoding """
+    def one_hot_encode(image, label):
+        return image, tf.one_hot(label, depth=num_classes)
+    
+    return dataset.map(one_hot_encode)
 
-# dense layer
-prediction = Dense(classes_num, activation='softmax')(flat_layer)
+# Load dataset
+train_dataset = tf.keras.utils.image_dataset_from_directory(
+    train_folder, image_size=(224, 224), batch_size=32
+)
+val_dataset = tf.keras.utils.image_dataset_from_directory(
+    val_folder, image_size=(224, 224), batch_size=32
+)
 
-# create the model with additional layers
-model = Model(inputs = resnet_model.input, outputs = prediction)
-print(model.summary())
+# Apply one-hot encoding
+train_dataset = preprocess_dataset(train_dataset, classes_num)
+val_dataset = preprocess_dataset(val_dataset, classes_num)
 
-# compile the model
-model.compile(
-    loss = 'categorical_crossentropy',
-    optimizer = 'adam',
-    metrics=['accuracy']
-            )
+# Optimize dataset performance
+AUTOTUNE = tf.data.experimental.AUTOTUNE
+train_dataset = train_dataset.prefetch(AUTOTUNE)
+val_dataset = val_dataset.prefetch(AUTOTUNE)
 
-# image augmentation
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
+with strategy.scope():
+    # Load ResNet50 without top layers
+    base_model = ResNet50(input_shape=image_size + [3], weights='imagenet', include_top=False)
 
-train_data = ImageDataGenerator(rescale = 1. / 255,
-                                shear_range = 0.2,
-                                zoom_range = 0.2,
-                                horizontal_flip = True
-                                )
+    # Freeze pre-trained layers
+    base_model.trainable = False  
 
-test_data = ImageDataGenerator(rescale = 1. / 255)
+    # Add classification head
+    x = Flatten()(base_model.output)
+    output_layer = Dense(classes_num, activation='softmax', dtype='float32')(x)  # Ensure correct dtype
 
-print('Training Data Found')
-training_set = train_data.flow_from_directory(train_folder, target_size = (224, 224), batch_size = 32, class_mode = 'categorical')
+    # Create final model
+    model = Model(inputs=base_model.input, outputs=output_layer)
 
-print('Validation Data Found:')
-test_set = test_data.flow_from_directory(val_folder, target_size = (224, 224), batch_size = 32, class_mode = 'categorical')
+    # Compile model
+    model.compile(
+        loss='categorical_crossentropy',
+        optimizer=tf.keras.optimizers.Adam(),
+        metrics=['accuracy']
+    )
 
-# Synchronize before starting the timer
-tf.function(lambda: None)()
+# Callbacks
+model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
+    './resnet50_car_best.keras', save_best_only=True, monitor='val_loss'
+)
+
+# Start training
 start_time = time.time()
-
-# fit the model
-result = model.fit(training_set,
-                   validation_data = test_set,
-                   epochs = 50,
-                   steps_per_epoch=len(training_set),
-                   validation_steps=len(test_set)
-                   )
-
-# Synchronize after training completes
-tf.function(lambda: None)()
+result = model.fit(
+    train_dataset,
+    validation_data=val_dataset,
+    epochs=50,
+    callbacks=[model_checkpoint]
+)
 end_time = time.time()
 
-# Calculate the elapsed time
-elapsed_time = end_time - start_time
-print(f"Training time: {elapsed_time} seconds")
+print(f"Training time: {end_time - start_time} seconds")
 
-# save the model
-model.save('./resnet50_car.h5')
-
-# plot the accuracy result
-# plt.plot(result.history['accuracy'], label='train_acc')
-# plt.plot(result.history['val_accuracy'], label='val_acc')
-# plt.legend()
-# plt.show()
-
-# # plot the loss result
-# plt.plot(result.history['loss'], label='train_loss')
-# plt.plot(result.history['val_loss'], label='val_loss')
-# plt.legend()
-# plt.show()
+# Save final model
+model.save('./resnet50_car_final.keras')
