@@ -1,7 +1,7 @@
 import time
-import os
 import argparse
 import tensorflow as tf
+import tensorflow_datasets as tfds
 from tensorflow.keras.layers import Flatten, Dense
 from tensorflow.keras.models import Model
 from tensorflow.keras.applications.resnet50 import ResNet50
@@ -15,6 +15,20 @@ args = parser.parse_args()
 strategy = tf.distribute.MirroredStrategy()
 print("Number of devices:", strategy.num_replicas_in_sync)
 
+# Set the original desired global batch size.
+original_global_batch_size = 32
+num_gpus = strategy.num_replicas_in_sync
+
+# Adjust the global batch size if it's not evenly divisible by the number of GPUs.
+if original_global_batch_size % num_gpus != 0:
+    adjusted_global_batch_size = (original_global_batch_size // num_gpus) * num_gpus
+    print(f"Global batch size {original_global_batch_size} is not divisible by {num_gpus} GPUs. Adjusting to {adjusted_global_batch_size}.")
+    global_batch_size = adjusted_global_batch_size
+else:
+    global_batch_size = original_global_batch_size
+
+print(f"Using global batch size: {global_batch_size}")
+
 # Enable mixed precision if --amp is passed
 if args.amp:
     from tensorflow.keras.mixed_precision import set_global_policy
@@ -22,63 +36,45 @@ if args.amp:
     print("Mixed precision training enabled.")
 
 image_size = [224, 224]
-train_folder = "./train_images/train"
-val_folder = "./train_images/val"
+num_classes = 10  # CIFAR-10 has 10 classes
 
-# Get number of classes from training folder
-classes = sorted(os.listdir(train_folder))
-classes_num = len(classes)
-print(f"Classes found: {classes}, Number of classes: {classes_num}")
+# Function to preprocess CIFAR-10 dataset with ImageNet normalization
+def preprocess(image, label):
+    image = tf.image.resize(image, image_size) / 255.0
+    image = (image - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]  # ImageNet normalization
+    return image, label  # No one-hot encoding needed
 
-# Function to apply one-hot encoding to dataset labels
-def preprocess_dataset(dataset, num_classes):
-    """ Convert integer labels to one-hot encoding """
-    def one_hot_encode(image, label):
-        return image, tf.one_hot(label, depth=num_classes)
-    
-    return dataset.map(one_hot_encode)
-
-# Load dataset
-train_dataset = tf.keras.utils.image_dataset_from_directory(
-    train_folder, image_size=(224, 224), batch_size=32
-)
-val_dataset = tf.keras.utils.image_dataset_from_directory(
-    val_folder, image_size=(224, 224), batch_size=32
+# Load CIFAR-10 dataset
+(ds_train, ds_test), ds_info = tfds.load(
+    'cifar10', split=['train', 'test'], as_supervised=True, with_info=True
 )
 
-# Apply one-hot encoding
-train_dataset = preprocess_dataset(train_dataset, classes_num)
-val_dataset = preprocess_dataset(val_dataset, classes_num)
-
-# Optimize dataset performance
-AUTOTUNE = tf.data.experimental.AUTOTUNE
-train_dataset = train_dataset.prefetch(AUTOTUNE)
-val_dataset = val_dataset.prefetch(AUTOTUNE)
+AUTOTUNE = tf.data.AUTOTUNE
+train_dataset = ds_train.map(preprocess).batch(global_batch_size, drop_remainder=True).prefetch(AUTOTUNE)
+val_dataset = ds_test.map(preprocess).batch(global_batch_size, drop_remainder=True).prefetch(AUTOTUNE)
 
 with strategy.scope():
     # Load ResNet50 without top layers
     base_model = ResNet50(input_shape=image_size + [3], weights='imagenet', include_top=False)
-
-    # Freeze pre-trained layers
-    base_model.trainable = False  
+    base_model.trainable = False  # Freeze pre-trained layers
 
     # Add classification head
     x = Flatten()(base_model.output)
-    output_layer = Dense(classes_num, activation='softmax', dtype='float32')(x)  # Ensure correct dtype
+    output_layer = Dense(num_classes, activation='softmax')(x)
 
     # Create final model
     model = Model(inputs=base_model.input, outputs=output_layer)
 
-    # Compile model
+    # Compile model with loss, optimizer, and metrics
     model.compile(
-        loss='categorical_crossentropy',
-        optimizer=tf.keras.optimizers.Adam(),
+        loss='sparse_categorical_crossentropy',
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
         metrics=['accuracy']
     )
 
 # Callbacks
 model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
-    './resnet50_car_best.keras', save_best_only=True, monitor='val_loss'
+    './resnet50_cifar10_best.keras', save_best_only=True, monitor='val_loss'
 )
 
 # Start training
@@ -86,7 +82,7 @@ start_time = time.time()
 result = model.fit(
     train_dataset,
     validation_data=val_dataset,
-    epochs=50,
+    epochs=25,
     callbacks=[model_checkpoint]
 )
 end_time = time.time()
@@ -94,4 +90,4 @@ end_time = time.time()
 print(f"Training time: {end_time - start_time} seconds")
 
 # Save final model
-model.save('./resnet50_car_final.keras')
+model.save('./resnet50_cifar10_final.keras')
