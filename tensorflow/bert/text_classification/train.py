@@ -1,5 +1,5 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1" # Workaround for tensorflow-hub and Keras 3 compatibility issue:
+os.environ["TF_USE_LEGACY_KERAS"] = "1" # Workaround for tensorflow-hub and Keras 3 compatibility issue.
 
 import time
 import argparse
@@ -13,25 +13,25 @@ def parse_args():
     parser.add_argument(
         "--amp",
         action="store_true",
-        help="Use automatic mixed precision for training (float16 on GPUs)."
+        help="Use automatic mixed precision for training (float16 on GPUs). (Default OFF)"
     )
     parser.add_argument(
         "--epochs",
         type=int,
         default=3,
-        help="Number of training epochs."
+        help="Number of training epochs. (Default 3)"
     )
     parser.add_argument(
         "--batch_size",
         type=int,
         default=32,
-        help="Training batch size."
+        help="Training batch size. (Default 32)"
     )
     parser.add_argument(
         "--learning_rate",
         type=float,
         default=3e-5,
-        help="Learning rate."
+        help="Learning rate. (Default 3e-5)"
     )
     parser.add_argument(
         "--export_dir",
