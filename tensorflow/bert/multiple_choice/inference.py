@@ -1,4 +1,5 @@
 import time
+import argparse
 import numpy as np
 import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModelForMultipleChoice
@@ -26,6 +27,18 @@ def preprocess_multiple_choice(context, question_header, endings, tokenizer):
     return tokenized
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--precision", type=str, choices=["fp32", "mixed"], default="fp32",
+                        help="Precision mode: 'fp32' (default) or 'mixed' for mixed precision.")
+    args = parser.parse_args()
+
+    # Enable mixed precision if requested
+    if args.precision == "mixed":
+        tf.keras.mixed_precision.set_global_policy("mixed_float16")
+        print("Using mixed precision inference (float16).")
+    else:
+        print("Using standard precision inference (float32).")
+
     # Load model
     model_dir = "./bert_mc_model"
 
@@ -52,6 +65,11 @@ def main():
     # Perform forward pass
     outputs = model(inputs)  # logits shape: [1, 4]
     logits = outputs.logits
+
+    # Ensure logits are cast to float32 in mixed precision mode
+    if args.precision == "mixed":
+        logits = tf.cast(logits, tf.float32)
+
     predicted_class = np.argmax(logits, axis=1)[0]  # best ending index
 
     end_time = time.time()
