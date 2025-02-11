@@ -6,7 +6,7 @@ from transformers import AutoTokenizer, TFAutoModelForMultipleChoice
 
 def preprocess_multiple_choice(context, question_header, endings, tokenizer):
     # Repeat context for each ending
-    first_sentences = [context] * 4
+    first_sentences = [context] * len(endings)
 
     # Append question_header to each ending
     second_sentences = [f"{question_header} {end}" for end in endings]
@@ -16,11 +16,11 @@ def preprocess_multiple_choice(context, question_header, endings, tokenizer):
         first_sentences,
         second_sentences,
         truncation=True,
-        padding=True,  # For a single sample, padding is optional
+        padding=True,
         return_tensors="tf"
     )
 
-    # Expand dims so shape is [1, 4, seq_len] instead of [4, seq_len]
+    # Expand dims so shape is [1, number_of_endings, seq_len]
     for key in tokenized:
         tokenized[key] = tf.expand_dims(tokenized[key], axis=0)
 
@@ -28,8 +28,13 @@ def preprocess_multiple_choice(context, question_header, endings, tokenizer):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--precision", type=str, choices=["fp32", "mixed"], default="fp32",
-                        help="Precision mode: 'fp32' (default) or 'mixed' for mixed precision.")
+    parser.add_argument(
+        "--precision",
+        type=str,
+        choices=["fp32", "mixed"],
+        default="fp32",
+        help="Precision mode: 'fp32' (default) or 'mixed' for mixed-float16."
+    )
     args = parser.parse_args()
 
     # Enable mixed precision if requested
@@ -39,10 +44,10 @@ def main():
     else:
         print("Using standard precision inference (float32).")
 
-    # Load model
+    # Directory containing the model and tokenizer
     model_dir = "./bert_mc_model"
 
-    # Example input
+    # Example inputs
     context = "He went to the store for some dairy"
     question_header = "He wanted to buy"
     endings = [
@@ -56,21 +61,20 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
     model = TFAutoModelForMultipleChoice.from_pretrained(model_dir)
 
-    # Measure inference time
     start_time = time.time()
 
-    # Preprocess
+    # Preprocess inputs
     inputs = preprocess_multiple_choice(context, question_header, endings, tokenizer)
 
-    # Perform forward pass
-    outputs = model(inputs)  # logits shape: [1, 4]
+    # Forward pass
+    outputs = model(inputs)  # logits shape: [1, len(endings)]
     logits = outputs.logits
 
-    # Ensure logits are cast to float32 in mixed precision mode
+    # If using mixed precision, cast logits back to float32 before np.argmax
     if args.precision == "mixed":
         logits = tf.cast(logits, tf.float32)
 
-    predicted_class = np.argmax(logits, axis=1)[0]  # best ending index
+    predicted_class = np.argmax(logits, axis=1)[0]
 
     end_time = time.time()
     total_inference_time = end_time - start_time
