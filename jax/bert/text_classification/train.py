@@ -4,7 +4,7 @@ from transformers import FlaxBertForSequenceClassification, AutoTokenizer
 import optax
 from datasets import load_dataset
 import numpy as np
-from flax import serialization
+import random
 import time
 import argparse
 
@@ -35,7 +35,7 @@ tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
 tokenized_datasets.set_format(type='numpy', columns=['input_ids', 'attention_mask', 'labels'])
 
 # Define optimizer
-optimizer = optax.adam(args.learning_rate, 0.01)
+optimizer = optax.adam(args.learning_rate)
 opt_state = optimizer.init(params)
 
 # Initialize PRNG key
@@ -44,12 +44,14 @@ rng = jax.random.PRNGKey(42)
 # Training step
 @jax.jit
 def train_step(params, opt_state, batch, rng):
+    rng, dropout_rng = jax.random.split(rng)  # Ensure dropout randomness per step
+
     def loss_fn(params):
         logits = model(
             input_ids=batch['input_ids'],
             attention_mask=batch['attention_mask'],
             params=params,
-            dropout_rng=rng,
+            dropout_rng=dropout_rng,  # Use updated dropout_rng
             train=True,
         ).logits
         one_hot_labels = jax.nn.one_hot(batch['labels'], num_classes=2)
@@ -60,7 +62,7 @@ def train_step(params, opt_state, batch, rng):
     (loss, logits), grads = grad_fn(params)
     updates, opt_state = optimizer.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
-    return params, opt_state, loss
+    return params, opt_state, loss, rng  # Return updated RNG
 
 # Evaluation step
 @jax.jit
@@ -76,12 +78,16 @@ def evaluate_step(params, batch):
     accuracy = jnp.mean(predictions == batch['labels'])
     return accuracy
 
-# Function to create batches
+# Function to create batches with shuffling
 def create_batches(dataset, batch_size):
     dataset_length = len(dataset['input_ids'])
+    indices = list(range(dataset_length))
+    random.shuffle(indices)  # Shuffle data before batching
+
     for i in range(0, dataset_length, batch_size):
+        batch_indices = indices[i:i + batch_size]
         yield {
-            key: dataset[key][i:i + batch_size]
+            key: dataset[key][batch_indices]
             for key in ['input_ids', 'attention_mask', 'labels']
         }
 
@@ -96,7 +102,7 @@ for epoch in range(args.epochs):
     train_loss = []
     for i, batch in enumerate(create_batches(tokenized_datasets['train'], args.batch_size)):
         rng, input_rng = jax.random.split(rng)
-        params, opt_state, loss = train_step(params, opt_state, batch, input_rng)
+        params, opt_state, loss, rng = train_step(params, opt_state, batch, rng)
         train_loss.append(loss)
 
         if i % 50 == 0:
@@ -109,7 +115,7 @@ for epoch in range(args.epochs):
     accuracies = []
     for batch in create_batches(tokenized_datasets['test'], args.batch_size):
         accuracy = evaluate_step(params, batch)
-        accuracies.append(accuracy)
+        accuracies.append(float(accuracy))  # Convert JAX tensor to float for NumPy
 
     avg_accuracy = np.mean(np.array(accuracies))
     print(f"Epoch {epoch + 1} Validation Accuracy: {avg_accuracy * 100:.2f}%")
@@ -121,5 +127,5 @@ total_end_time = time.time()
 print(f"Total training time: {(total_end_time - total_start_time) / 60:.2f} minutes.")
 
 # Save model and tokenizer
-model.save_pretrained("bert_tc")
+model.save_pretrained("bert_tc", params=params)  # Ensure params are saved
 tokenizer.save_pretrained("bert_tc")
