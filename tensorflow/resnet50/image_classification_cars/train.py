@@ -1,3 +1,6 @@
+import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
 import time
 import argparse
 import tensorflow as tf
@@ -22,7 +25,8 @@ num_gpus = strategy.num_replicas_in_sync
 # Adjust the global batch size if it's not evenly divisible by the number of GPUs.
 if original_global_batch_size % num_gpus != 0:
     adjusted_global_batch_size = (original_global_batch_size // num_gpus) * num_gpus
-    print(f"Global batch size {original_global_batch_size} is not divisible by {num_gpus} GPUs. Adjusting to {adjusted_global_batch_size}.")
+    print(f"Global batch size {original_global_batch_size} is not divisible by {num_gpus} GPUs. "
+          f"Adjusting to {adjusted_global_batch_size}.")
     global_batch_size = adjusted_global_batch_size
 else:
     global_batch_size = original_global_batch_size
@@ -42,7 +46,7 @@ num_classes = 10  # CIFAR-10 has 10 classes
 def preprocess(image, label):
     image = tf.image.resize(image, image_size) / 255.0
     image = (image - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]  # ImageNet normalization
-    return image, label  # No one-hot encoding needed
+    return image, label
 
 # Load CIFAR-10 dataset
 (ds_train, ds_test), ds_info = tfds.load(
@@ -50,8 +54,18 @@ def preprocess(image, label):
 )
 
 AUTOTUNE = tf.data.AUTOTUNE
-train_dataset = ds_train.map(preprocess).batch(global_batch_size, drop_remainder=True).prefetch(AUTOTUNE)
-val_dataset = ds_test.map(preprocess).batch(global_batch_size, drop_remainder=True).prefetch(AUTOTUNE)
+
+# Shuffle the training dataset to help with convergence
+train_dataset = ds_train \
+    .map(preprocess, num_parallel_calls=AUTOTUNE) \
+    .shuffle(10_000) \
+    .batch(global_batch_size, drop_remainder=True) \
+    .prefetch(AUTOTUNE)
+
+val_dataset = ds_test \
+    .map(preprocess, num_parallel_calls=AUTOTUNE) \
+    .batch(global_batch_size, drop_remainder=True) \
+    .prefetch(AUTOTUNE)
 
 with strategy.scope():
     # Load ResNet50 without top layers
@@ -60,19 +74,20 @@ with strategy.scope():
 
     # Add classification head
     x = Flatten()(base_model.output)
-    output_layer = Dense(num_classes, activation='softmax')(x)
+    # Use dtype=tf.float32 to avoid NaNs in mixed-precision final logits/softmax
+    output_layer = Dense(num_classes, activation='softmax', dtype=tf.float32)(x)
 
     # Create final model
     model = Model(inputs=base_model.input, outputs=output_layer)
 
-    # Compile model with loss, optimizer, and metrics
+    # Compile model
     model.compile(
         loss='sparse_categorical_crossentropy',
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
         metrics=['accuracy']
     )
 
-# Callbacks
+# Define callbacks
 model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
     './resnet50_cifar10_best.keras', save_best_only=True, monitor='val_loss'
 )
