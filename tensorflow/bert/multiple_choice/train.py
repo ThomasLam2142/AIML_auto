@@ -1,3 +1,6 @@
+import os
+os.environ["TF_USE_LEGACY_KERAS"] ="1"
+
 import argparse
 import time
 import numpy as np
@@ -40,6 +43,7 @@ def parse_args():
     )
     return parser.parse_args()
 
+
 @dataclass
 class DataCollatorForMultipleChoice:
     tokenizer: PreTrainedTokenizerBase
@@ -53,6 +57,7 @@ class DataCollatorForMultipleChoice:
         batch_size = len(features)
         num_choices = len(features[0]["input_ids"])
 
+        # Flatten all choices for each feature
         flattened_features = [
             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)]
             for feature in features
@@ -67,6 +72,7 @@ class DataCollatorForMultipleChoice:
             return_tensors="tf",
         )
 
+        # Reshape to [batch_size, num_choices, seq_len]
         batch = {
             k: tf.reshape(v, (batch_size, num_choices, -1))
             for k, v in batch.items()
@@ -76,6 +82,11 @@ class DataCollatorForMultipleChoice:
 
 
 def preprocess_function(examples, tokenizer, ending_names):
+    """
+    Preprocess SWAG samples for multiple-choice:
+    1. Duplicate sent1 4 times (one for each choice).
+    2. Combine sent2 with each possible ending.
+    """
     first_sentences = [[context] * 4 for context in examples["sent1"]]
     question_headers = examples["sent2"]
     second_sentences = [
@@ -83,6 +94,7 @@ def preprocess_function(examples, tokenizer, ending_names):
         for i, header in enumerate(question_headers)
     ]
 
+    # Flatten
     first_sentences = sum(first_sentences, [])
     second_sentences = sum(second_sentences, [])
 
@@ -92,6 +104,7 @@ def preprocess_function(examples, tokenizer, ending_names):
         truncation=True
     )
 
+    # Regroup the tokens
     return {
         k: [v[i : i + 4] for i in range(0, len(v), 4)]
         for k, v in tokenized_examples.items()
@@ -99,6 +112,9 @@ def preprocess_function(examples, tokenizer, ending_names):
 
 
 def compute_metrics(eval_pred):
+    """
+    Compute accuracy for multiple-choice predictions.
+    """
     accuracy_metric = evaluate.load("accuracy")
     predictions, labels = eval_pred
     predictions = np.argmax(predictions, axis=1)
@@ -108,13 +124,7 @@ def compute_metrics(eval_pred):
 def main():
     args = parse_args()
 
-    # Mixed precision
-    if args.amp:
-        from tensorflow.keras import mixed_precision
-        mixed_precision.set_global_policy("mixed_float16")
-        print("Using mixed precision (float16).")
-
-    # Choose strategy
+    # List GPUs
     gpus = tf.config.list_physical_devices("GPU")
     if len(gpus) > 1:
         strategy = tf.distribute.MirroredStrategy()
@@ -126,9 +136,10 @@ def main():
         else:
             print("No GPU detected, using CPU strategy.")
 
-    # Load dataset
+    # Load the SWAG dataset
     swag = load_dataset("swag", "regular")
     tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+
     ending_names = ["ending0", "ending1", "ending2", "ending3"]
     tokenized_swag = swag.map(
         lambda x: preprocess_function(x, tokenizer, ending_names),
@@ -137,27 +148,36 @@ def main():
 
     data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
 
+    # Calculate total training steps
     total_train_steps = (len(tokenized_swag["train"]) // args.batch_size) * args.epochs
 
-    # Create the optimizer INSIDE strategy.scope(), otherwise MirroredStrategy will break
+    # Define everything inside the strategy scope
     with strategy.scope():
-        # 1. Create optimizer + schedule
+        # If AMP is enabled, set mixed precision
+        if args.amp:
+            from tensorflow.keras import mixed_precision
+            mixed_precision.set_global_policy("mixed_float16")
+            # Force LayerNormalization to float32
+            tf.keras.layers.LayerNormalization = tf.keras.layers.LayerNormalization(dtype='float32')
+            print("Using mixed precision (float16).")
+
+        # Create optimizer & scheduler
         optimizer, schedule = create_optimizer(
             init_lr=args.learning_rate,
             num_warmup_steps=0,
             num_train_steps=total_train_steps
         )
 
-        # 2. Load the model
+        # Load BERT model for multiple choice
         model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
 
-        # 3. Compile the model
+        # Compile the model with optimizer and metrics
         model.compile(
             optimizer=optimizer,
             metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="accuracy")]
         )
 
-    # Prepare TF datasets
+    # Prepare TensorFlow datasets
     tf_train_set = model.prepare_tf_dataset(
         tokenized_swag["train"],
         shuffle=True,
@@ -171,12 +191,13 @@ def main():
         collate_fn=data_collator,
     )
 
+    # Create the evaluation callback
     metric_callback = KerasMetricCallback(
         metric_fn=compute_metrics,
         eval_dataset=tf_validation_set
     )
 
-    # Train
+    # Start training
     print(f"Starting training for {args.epochs} epoch(s)")
     start_time = time.time()
     model.fit(
@@ -188,7 +209,7 @@ def main():
     total_time = time.time() - start_time
     print(f"Total training time: {total_time:.2f} seconds")
 
-    # Evaluate
+    # Final evaluation
     eval_loss, eval_accuracy = model.evaluate(tf_validation_set)
     print(f"Final Val Loss: {eval_loss:.4f} | Final Val Accuracy: {eval_accuracy:.4f}")
 
