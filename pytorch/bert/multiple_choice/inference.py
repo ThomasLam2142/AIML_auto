@@ -71,5 +71,5 @@ print(f"Prompt: {prompt}")
 print(f"Answer: {candidates[predicted_class]}")
 
 # Calculate and print the inference time
-inference_duration = end_time - start_time
+inference_duration = (end_time - start_time) * 1000
 print(f"Inference Time = {inference_duration:.6f} s")
