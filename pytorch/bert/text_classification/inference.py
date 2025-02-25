@@ -54,5 +54,5 @@ output = model.config.id2label[predicted_class_id]
 print(output)
 
 # Calculate and print inference duration
-inference_duration = end_time - start_time
-print(f"Inference Time = {inference_duration:.4f} seconds")
+inference_duration = (end_time - start_time) * 1000
+print(f"Inference Time = {inference_duration:.4f} ms")
