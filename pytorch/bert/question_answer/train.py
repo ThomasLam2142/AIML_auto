@@ -115,8 +115,8 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a DistilBERT model for Question Answering with AMP.")
     parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision (AMP).')
-    parser.add_argument('--batch_size', type=int, default=16, help='Batch size per device.')
-    parser.add_argument('--epochs', type=int, default=3, help='Number of epochs to train (default: 3)')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size per device.')
+    parser.add_argument('--epochs', type=int, default=5, help='Number of epochs to train (default: 3)')
     args = parser.parse_args()
     
     main(args)
